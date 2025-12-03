@@ -2,76 +2,374 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <title>Tickets de votre support</title>
+  <title>Portail Support - Tickets</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
+    :root {
+      --bg: #0f172a;
+      --bg-card: #0b1220;
+      --bg-soft: #020617;
+      --accent: #3b82f6;
+      --accent-soft: rgba(59,130,246,0.15);
+      --text-main: #e5e7eb;
+      --text-muted: #9ca3af;
+      --border-subtle: rgba(148,163,184,0.25);
+      --danger: #ef4444;
+      --success: #22c55e;
+      --warning: #eab308;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
     body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       margin: 0;
-      padding: 20px;
-      background: #f3f4f6;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top, #1d283a 0, #020617 45%, #020617 100%);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
     }
-    h1 { margin-bottom: 8px; }
+
+    .app {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px 16px 40px;
+      width: 100%;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      gap: 12px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-logo {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #3b82f6, #22c55e);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 20px;
+      color: #0b1120;
+      box-shadow: 0 10px 30px rgba(59,130,246,0.55);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+    }
+
+    .subtitle {
+      margin: 4px 0 0;
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .pill {
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(15,23,42,0.7);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.3fr);
+      gap: 16px;
+    }
+
+    @media (max-width: 900px) {
+      .layout {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
     .card {
-      background: #ffffff;
-      border-radius: 8px;
-      padding: 16px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-      margin-bottom: 20px;
+      background: radial-gradient(circle at top left, rgba(148,163,184,0.15) 0, rgba(15,23,42,0.95) 45%, #020617 100%);
+      border-radius: 18px;
+      padding: 16px 16px 18px;
+      border: 1px solid var(--border-subtle);
+      box-shadow: 0 14px 35px rgba(15,23,42,0.9);
     }
+
+    .card h2 {
+      margin: 0 0 8px;
+      font-size: 16px;
+    }
+
+    .card p {
+      margin: 0;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .card + .card {
+      margin-top: 12px;
+    }
+
+    /* Liste des tickets */
+    .tickets-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      gap: 8px;
+    }
+
+    .tickets-header h2 {
+      margin: 0;
+      font-size: 16px;
+    }
+
+    #refreshBtn {
+      border-radius: 999px;
+      border: 1px solid rgba(148,163,184,0.4);
+      padding: 6px 14px;
+      font-size: 13px;
+      background: linear-gradient(135deg, rgba(59,130,246,0.15), rgba(37,99,235,0.05));
+      color: var(--text-main);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    #refreshBtn:hover {
+      border-color: rgba(129,140,248,0.9);
+      box-shadow: 0 0 0 1px rgba(99,102,241,0.7);
+    }
+
+    #refreshBtn:disabled {
+      opacity: 0.6;
+      cursor: default;
+      box-shadow: none;
+    }
+
+    #error {
+      margin-top: 8px;
+      font-size: 13px;
+      color: var(--danger);
+    }
+
     table {
       width: 100%;
       border-collapse: collapse;
-      margin-top: 12px;
-      font-size: 14px;
+      margin-top: 10px;
+      font-size: 13px;
     }
+
     th, td {
-      border-bottom: 1px solid #e5e7eb;
-      padding: 8px;
+      padding: 8px 6px;
       text-align: left;
+      border-bottom: 1px solid rgba(15,23,42,0.85);
     }
+
     th {
-      background: #f9fafb;
-      font-weight: 600;
+      font-weight: 500;
+      color: var(--text-muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      background: rgba(15,23,42,0.8);
+      position: sticky;
+      top: 0;
+      z-index: 1;
     }
-    tr:hover {
-      background: #f3f4ff;
+
+    tbody tr:hover {
+      background: rgba(15,23,42,0.85);
       cursor: pointer;
     }
-    .status { font-weight: 600; }
-    #error { color: #b91c1c; margin-top: 10px; }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .badge-status-open {
+      background: rgba(34,197,94,0.12);
+      color: #4ade80;
+      border: 1px solid rgba(34,197,94,0.5);
+    }
+
+    .badge-status-closed {
+      background: rgba(148,163,184,0.16);
+      color: #cbd5f5;
+      border: 1px solid rgba(148,163,184,0.6);
+    }
+
+    .badge-status-onhold {
+      background: rgba(234,179,8,0.15);
+      color: #facc15;
+      border: 1px solid rgba(234,179,8,0.65);
+    }
+
+    .badge-priority-high {
+      background: rgba(248,113,113,0.18);
+      color: #fb7185;
+      border: 1px solid rgba(248,113,113,0.7);
+    }
+
+    .badge-priority-normal {
+      background: rgba(59,130,246,0.14);
+      color: #93c5fd;
+      border: 1px solid rgba(59,130,246,0.6);
+    }
+
+    .ticket-subject {
+      max-width: 260px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    #noTickets {
+      margin-top: 8px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    /* Détail & historique */
+
+    #detailsCard p {
+      margin-bottom: 4px;
+    }
+
+    #detailsCard hr {
+      border: none;
+      border-top: 1px solid rgba(148,163,184,0.25);
+      margin: 10px 0;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 4px 12px;
+      font-size: 12px;
+    }
+
+    .meta-label {
+      color: var(--text-muted);
+    }
+
+    .meta-value {
+      font-weight: 500;
+    }
+
+    #detailsContent a {
+      color: #93c5fd;
+      text-decoration: none;
+    }
+
+    #detailsContent a:hover {
+      text-decoration: underline;
+    }
+
+    #historyList {
+      list-style: none;
+      padding-left: 0;
+      margin: 8px 0 0;
+      max-height: 260px;
+      overflow-y: auto;
+      font-size: 12px;
+    }
+
+    #historyList li {
+      padding: 4px 0;
+      border-bottom: 1px solid rgba(15,23,42,0.9);
+      color: var(--text-muted);
+    }
+
+    .history-time {
+      color: var(--text-main);
+      font-weight: 500;
+    }
+
   </style>
 </head>
 <body>
-  <h1>Tickets de votre support</h1>
-  <div class="card">
-    <p>Voici la liste des tickets associés à votre compte.</p>
-    <button id="refreshBtn">Actualiser</button>
-    <div id="error"></div>
+  <div class="app">
+    <header>
+      <div class="brand">
+        <div class="brand-logo">C</div>
+        <div>
+          <h1>Tickets de votre support</h1>
+          <p class="subtitle">Portail client connecté à Zoho Desk</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <span class="pill">Compte : My Digital Portal</span>
+        <span class="pill">Cartronics</span>
+      </div>
+    </header>
 
-    <table id="ticketsTable" style="display:none;">
-      <thead>
-        <tr>
-          <th>Numéro</th>
-          <th>Sujet</th>
-          <th>Statut</th>
-          <th>Priorité</th>
-          <th>Créé le</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-    <p id="noTickets" style="display:none;">Aucun ticket trouvé.</p>
-  </div>
+    <main class="layout">
+      <!-- Colonne gauche : liste -->
+      <section class="card">
+        <div class="tickets-header">
+          <div>
+            <h2>Tickets</h2>
+            <p>Double-cliquez sur un ticket pour voir les détails.</p>
+          </div>
+          <button id="refreshBtn">Actualiser</button>
+        </div>
+        <div id="error"></div>
 
-  <div class="card" id="detailsCard" style="display:none;">
-    <h2>Détail du ticket</h2>
-    <div id="detailsContent"></div>
-  </div>
+        <table id="ticketsTable" style="display:none;">
+          <thead>
+          <tr>
+            <th>N°</th>
+            <th>Sujet</th>
+            <th>Statut</th>
+            <th>Priorité</th>
+            <th>Créé le</th>
+          </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <p id="noTickets" style="display:none;">Aucun ticket trouvé pour ce compte.</p>
+      </section>
 
-  <div class="card" id="historyCard" style="display:none;">
-    <h2>Historique du ticket</h2>
-    <ul id="historyList" style="padding-left:18px;"></ul>
+      <!-- Colonne droite : détail + historique -->
+      <section>
+        <div class="card" id="detailsCard" style="display:none;">
+          <h2>Détail du ticket</h2>
+          <div id="detailsContent"></div>
+        </div>
+
+        <div class="card" id="historyCard" style="display:none;">
+          <h2>Historique du ticket</h2>
+          <ul id="historyList"></ul>
+        </div>
+      </section>
+    </main>
   </div>
 
   <script>
@@ -84,6 +382,23 @@
     const detailsContent = document.getElementById('detailsContent');
     const historyCard = document.getElementById('historyCard');
     const historyList = document.getElementById('historyList');
+
+    function statusBadge(status) {
+      if (!status) return '';
+      const s = status.toLowerCase();
+      let cls = 'badge-status-closed';
+      if (s.includes('open') || s.includes('new')) cls = 'badge-status-open';
+      else if (s.includes('hold') || s.includes('en attente')) cls = 'badge-status-onhold';
+      return `<span class="badge ${cls}">${status}</span>`;
+    }
+
+    function priorityBadge(priority) {
+      if (!priority) return '';
+      const p = priority.toLowerCase();
+      let cls = 'badge-priority-normal';
+      if (p.includes('haute') || p.includes('high')) cls = 'badge-priority-high';
+      return `<span class="badge ${cls}">${priority}</span>`;
+    }
 
     async function loadTickets() {
       errorDiv.textContent = '';
@@ -113,9 +428,9 @@
             const created = t.createdTime ? new Date(t.createdTime).toLocaleString() : '';
             tr.innerHTML = `
               <td>${t.ticketNumber || ''}</td>
-              <td>${t.subject || ''}</td>
-              <td class="status">${t.status || ''}</td>
-              <td>${t.priority || ''}</td>
+              <td class="ticket-subject">${t.subject || ''}</td>
+              <td>${statusBadge(t.status)}</td>
+              <td>${priorityBadge(t.priority)}</td>
               <td>${created}</td>
             `;
             tr.addEventListener('click', () => loadDetails(t.id, t.ticketNumber));
@@ -155,19 +470,53 @@
         const tasks = data.taskCount || '0';
 
         detailsContent.innerHTML = `
-          <p><strong>Ticket #${data.ticketNumber}</strong></p>
+          <div class="meta-grid" style="margin-bottom:10px;">
+            <div>
+              <div class="meta-label">Ticket</div>
+              <div class="meta-value">#${data.ticketNumber}</div>
+            </div>
+            <div>
+              <div class="meta-label">Statut</div>
+              <div class="meta-value">${statusBadge(data.status)}</div>
+            </div>
+            <div>
+              <div class="meta-label">Priorité</div>
+              <div class="meta-value">${priorityBadge(data.priority) || '-'}</div>
+            </div>
+            <div>
+              <div class="meta-label">Créé le</div>
+              <div class="meta-value">${created}</div>
+            </div>
+            ${closed ? `
+            <div>
+              <div class="meta-label">Clôturé le</div>
+              <div class="meta-value">${closed}</div>
+            </div>` : ''}
+            <div>
+              <div class="meta-label">Email</div>
+              <div class="meta-value">${data.email || '-'}</div>
+            </div>
+          </div>
+
           <p><strong>Sujet :</strong> ${data.subject || ''}</p>
-          <p><strong>Statut :</strong> ${data.status || ''}</p>
-          <p><strong>Priorité :</strong> ${data.priority || ''}</p>
-          <p><strong>Créé le :</strong> ${created}</p>
-          ${closed ? `<p><strong>Clôturé le :</strong> ${closed}</p>` : ''}
-          <p><strong>Email :</strong> ${data.email || ''}</p>
-          <p><strong>Ouvrir dans Zoho Desk :</strong> <a href="${data.webUrl}" target="_blank">voir dans Zoho Desk</a></p>
+          <p><strong>Ouvrir dans Zoho Desk :</strong> <a href="${data.webUrl}" target="_blank">Voir le ticket</a></p>
 
           <hr />
-          <p><strong>Entrées de temps :</strong> ${timeEntries}</p>
-          <p><strong>Pièces jointes :</strong> ${attachments}</p>
-          <p><strong>Activités :</strong> ${tasks}</p>
+
+          <div class="meta-grid">
+            <div>
+              <div class="meta-label">Entrées de temps</div>
+              <div class="meta-value">${timeEntries}</div>
+            </div>
+            <div>
+              <div class="meta-label">Pièces jointes</div>
+              <div class="meta-value">${attachments}</div>
+            </div>
+            <div>
+              <div class="meta-label">Activités</div>
+              <div class="meta-value">${tasks}</div>
+            </div>
+          </div>
 
           <hr />
           <p><strong>Résolution :</strong></p>
@@ -210,7 +559,7 @@
           const when = ev.eventTime ? new Date(ev.eventTime).toLocaleString() : '';
           const name = ev.eventName || 'Évènement';
           const actor = ev.actor && ev.actor.name ? ` par ${ev.actor.name}` : '';
-          li.textContent = `${when} – ${name}${actor}`;
+          li.innerHTML = `<span class="history-time">${when}</span> – ${name}${actor}`;
           historyList.appendChild(li);
         });
       } catch (e) {
