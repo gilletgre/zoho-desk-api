@@ -63,6 +63,7 @@
       gap: 12px;
       position: relative;
       z-index: 1;
+      flex-wrap: wrap;
     }
 
     .brand {
@@ -118,6 +119,10 @@
       align-items: flex-start;
       position: relative;
       z-index: 1;
+    }
+
+    .layout > section {
+      min-width: 0;
     }
 
     @media (max-width: 900px) {
@@ -194,17 +199,40 @@
       color: var(--danger);
     }
 
+    .table-wrapper {
+      width: 100%;
+      overflow-x: auto;
+    }
+
     table {
       width: 100%;
       border-collapse: collapse;
       margin-top: 10px;
       font-size: 13px;
+      table-layout: fixed;
+      min-width: 620px;
     }
 
     th, td {
       padding: 8px 6px;
       text-align: left;
       border-bottom: 1px solid rgba(15,23,42,0.85);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    th:nth-child(2), td:nth-child(2) {
+      max-width: 280px;
+    }
+
+    th:nth-child(3), td:nth-child(3),
+    th:nth-child(4), td:nth-child(4) {
+      max-width: 130px;
+    }
+
+    th:nth-child(5), td:nth-child(5) {
+      max-width: 160px;
     }
 
     th {
@@ -320,6 +348,7 @@
     #detailsContent {
       line-height: 1.5;
       word-break: break-word;
+      overflow-wrap: anywhere;
     }
 
     #detailsContent a:hover {
@@ -411,6 +440,7 @@
       line-height: 1.5;
       font-size: 13px;
       word-break: break-word;
+      overflow-wrap: anywhere;
     }
 
     .pill-grid {
@@ -525,18 +555,20 @@
         </div>
         <div id="error"></div>
 
-        <table id="ticketsTable" style="display:none;">
-          <thead>
-          <tr>
-            <th>N°</th>
-            <th>Sujet</th>
-            <th>Statut</th>
-            <th>Priorité</th>
-            <th>Créé le</th>
-          </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
+        <div class="table-wrapper">
+          <table id="ticketsTable" style="display:none;">
+            <thead>
+            <tr>
+              <th>N°</th>
+              <th>Sujet</th>
+              <th>Statut</th>
+              <th>Priorité</th>
+              <th>Créé le</th>
+            </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
         <p id="noTickets" style="display:none;">Aucun ticket trouvé pour ce compte.</p>
       </section>
 
