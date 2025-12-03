@@ -138,17 +138,19 @@
 
         const created = data.createdTime ? new Date(data.createdTime).toLocaleString() : '';
         const closed = data.closedTime ? new Date(data.closedTime).toLocaleString() : '';
-
         // description est souvent en HTML côté Zoho
-        const description = data.description || '(Aucune description)';
+        const description = data.description || '(Aucune description disponible)';
 
         detailsContent.innerHTML = `
           <p><strong>Ticket #${data.ticketNumber}</strong></p>
           <p><strong>Sujet :</strong> ${data.subject || ''}</p>
           <p><strong>Statut :</strong> ${data.status || ''}</p>
-          <p><strong>Priorité :</strong> ${data.priority || ''}</p>
           <p><strong>Créé le :</strong> ${created}</p>
           ${closed ? `<p><strong>Clôturé le :</strong> ${closed}</p>` : ''}
+          <p><strong>Email :</strong> ${data.email || ''}</p>
+          <p><strong>Langue :</strong> ${data.language || ''}</p>
+          <p><strong>Priorité :</strong> ${data.priority || ''}</p>
+          <p><strong>Ouvrir dans Zoho Desk :</strong> <a href="${data.webUrl}" target="_blank">voir dans Zoho Desk</a></p>
           <hr />
           <p><strong>Description :</strong></p>
           <div>${description}</div>
