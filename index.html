@@ -261,6 +261,26 @@
       transform: scale(0.995);
     }
 
+    .filter-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 6px;
+      flex-wrap: wrap;
+    }
+
+    .filter-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-muted);
+      padding: 6px 10px;
+      border-radius: 10px;
+      background: rgba(15,23,42,0.65);
+      border: 1px solid rgba(148,163,184,0.2);
+    }
+
     .badge {
       display: inline-flex;
       align-items: center;
@@ -557,6 +577,12 @@
           </div>
           <button id="refreshBtn">Actualiser</button>
         </div>
+        <div class="filter-row">
+          <label class="filter-toggle">
+            <input type="checkbox" id="portalFilter" />
+            <span>Afficher uniquement les tickets contenant [Portal]</span>
+          </label>
+        </div>
         <div id="error"></div>
 
         <div class="table-wrapper">
@@ -601,10 +627,12 @@
     const detailsContent = document.getElementById('detailsContent');
     const historyCard = document.getElementById('historyCard');
     const historyList = document.getElementById('historyList');
+    const portalFilter = document.getElementById('portalFilter');
     const statTotal = document.getElementById('statTotal');
     const statOpen = document.getElementById('statOpen');
     const statClosed = document.getElementById('statClosed');
     const statHigh = document.getElementById('statHigh');
+    let ticketsCache = [];
 
     function statusBadge(status) {
       if (!status) return '';
@@ -621,6 +649,42 @@
       let cls = 'badge-priority-normal';
       if (p.includes('haute') || p.includes('high')) cls = 'badge-priority-high';
       return `<span class="badge ${cls}">${priority}</span>`;
+    }
+
+    function renderTickets(tickets = []) {
+      table.style.display = 'none';
+      tbody.innerHTML = '';
+      noTickets.style.display = 'none';
+
+      const filtered = portalFilter.checked
+        ? tickets.filter(t => (t.subject || '').toLowerCase().includes('[portal]'))
+        : tickets;
+
+      if (filtered.length === 0) {
+        noTickets.textContent = portalFilter.checked
+          ? 'Aucun ticket contenant [Portal].'
+          : 'Aucun ticket trouvé pour ce compte.';
+        noTickets.style.display = 'block';
+        updateStats(filtered);
+        return;
+      }
+
+      filtered.forEach(t => {
+        const tr = document.createElement('tr');
+        const created = t.createdTime ? new Date(t.createdTime).toLocaleString() : '';
+        tr.innerHTML = `
+          <td>${t.ticketNumber || ''}</td>
+          <td class="ticket-subject">${t.subject || ''}</td>
+          <td>${statusBadge(t.status)}</td>
+          <td>${priorityBadge(t.priority)}</td>
+          <td>${created}</td>
+        `;
+        tr.addEventListener('click', () => loadDetails(t.id, t.ticketNumber));
+        tbody.appendChild(tr);
+      });
+
+      table.style.display = 'table';
+      updateStats(filtered);
     }
 
     function updateStats(tickets = []) {
@@ -651,12 +715,10 @@
 
     async function loadTickets() {
       errorDiv.textContent = '';
-      table.style.display = 'none';
-      noTickets.style.display = 'none';
-      tbody.innerHTML = '';
       detailsCard.style.display = 'none';
       historyCard.style.display = 'none';
-      updateStats([]);
+      ticketsCache = [];
+      renderTickets([]);
 
       refreshBtn.disabled = true;
       refreshBtn.textContent = 'Chargement...';
@@ -670,30 +732,12 @@
         }
 
         const tickets = Array.isArray(data) ? data : [];
-        if (tickets.length === 0) {
-          noTickets.style.display = 'block';
-          updateStats([]);
-        } else {
-          tickets.forEach(t => {
-            const tr = document.createElement('tr');
-            const created = t.createdTime ? new Date(t.createdTime).toLocaleString() : '';
-            tr.innerHTML = `
-              <td>${t.ticketNumber || ''}</td>
-              <td class="ticket-subject">${t.subject || ''}</td>
-              <td>${statusBadge(t.status)}</td>
-              <td>${priorityBadge(t.priority)}</td>
-              <td>${created}</td>
-            `;
-            tr.addEventListener('click', () => loadDetails(t.id, t.ticketNumber));
-            tbody.appendChild(tr);
-          });
-          table.style.display = 'table';
-          updateStats(tickets);
-        }
+        ticketsCache = tickets;
+        renderTickets(ticketsCache);
       } catch (e) {
         console.error(e);
         errorDiv.textContent = 'Erreur lors du chargement des tickets : ' + (e.message || '');
-        updateStats([]);
+        renderTickets([]);
       } finally {
         refreshBtn.disabled = false;
         refreshBtn.textContent = 'Actualiser';
@@ -828,6 +872,7 @@
     }
 
     refreshBtn.addEventListener('click', loadTickets);
+    portalFilter.addEventListener('change', () => renderTickets(ticketsCache));
     loadTickets();
   </script>
 </body>
