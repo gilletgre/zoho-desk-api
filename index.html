@@ -149,6 +149,10 @@
         const created = data.createdTime ? new Date(data.createdTime).toLocaleString() : '';
         const closed = data.closedTime ? new Date(data.closedTime).toLocaleString() : '';
         const description = data.description || '(Aucune description disponible)';
+        const resolution = data.resolution || '(Aucune résolution encodée)';
+        const timeEntries = data.timeEntryCount || '0';
+        const attachments = data.attachmentCount || '0';
+        const tasks = data.taskCount || '0';
 
         detailsContent.innerHTML = `
           <p><strong>Ticket #${data.ticketNumber}</strong></p>
@@ -159,6 +163,16 @@
           ${closed ? `<p><strong>Clôturé le :</strong> ${closed}</p>` : ''}
           <p><strong>Email :</strong> ${data.email || ''}</p>
           <p><strong>Ouvrir dans Zoho Desk :</strong> <a href="${data.webUrl}" target="_blank">voir dans Zoho Desk</a></p>
+
+          <hr />
+          <p><strong>Entrées de temps :</strong> ${timeEntries}</p>
+          <p><strong>Pièces jointes :</strong> ${attachments}</p>
+          <p><strong>Activités :</strong> ${tasks}</p>
+
+          <hr />
+          <p><strong>Résolution :</strong></p>
+          <div>${resolution}</div>
+
           <hr />
           <p><strong>Description :</strong></p>
           <div>${description}</div>
