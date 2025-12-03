@@ -60,12 +60,19 @@
     <p id="noTickets" style="display:none;">Aucun ticket trouvé.</p>
   </div>
 
+  <div class="card" id="detailsCard" style="display:none;">
+    <h2>Détail du ticket</h2>
+    <div id="detailsContent"></div>
+  </div>
+
   <script>
     const refreshBtn = document.getElementById('refreshBtn');
     const errorDiv = document.getElementById('error');
     const table = document.getElementById('ticketsTable');
     const tbody = table.querySelector('tbody');
     const noTickets = document.getElementById('noTickets');
+    const detailsCard = document.getElementById('detailsCard');
+    const detailsContent = document.getElementById('detailsContent');
 
     async function loadTickets() {
       errorDiv.textContent = '';
@@ -99,6 +106,10 @@
               <td>${t.priority || ''}</td>
               <td>${created}</td>
             `;
+
+            // clic sur la ligne => charger les détails
+            tr.addEventListener('click', () => loadDetails(t.id, t.ticketNumber));
+
             tbody.appendChild(tr);
           });
           table.style.display = 'table';
@@ -109,6 +120,41 @@
       } finally {
         refreshBtn.disabled = false;
         refreshBtn.textContent = 'Actualiser';
+      }
+    }
+
+    async function loadDetails(ticketId, ticketNumber) {
+      detailsCard.style.display = 'block';
+      detailsContent.innerHTML = 'Chargement du détail du ticket ' + ticketNumber + '...';
+
+      try {
+        const res = await fetch('/.netlify/functions/ticketDetails?id=' + encodeURIComponent(ticketId));
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || 'Erreur API détail');
+        }
+
+        const created = data.createdTime ? new Date(data.createdTime).toLocaleString() : '';
+        const closed = data.closedTime ? new Date(data.closedTime).toLocaleString() : '';
+
+        // description est souvent en HTML côté Zoho
+        const description = data.description || '(Aucune description)';
+
+        detailsContent.innerHTML = `
+          <p><strong>Ticket #${data.ticketNumber}</strong></p>
+          <p><strong>Sujet :</strong> ${data.subject || ''}</p>
+          <p><strong>Statut :</strong> ${data.status || ''}</p>
+          <p><strong>Priorité :</strong> ${data.priority || ''}</p>
+          <p><strong>Créé le :</strong> ${created}</p>
+          ${closed ? `<p><strong>Clôturé le :</strong> ${closed}</p>` : ''}
+          <hr />
+          <p><strong>Description :</strong></p>
+          <div>${description}</div>
+        `;
+      } catch (e) {
+        console.error(e);
+        detailsContent.innerHTML = 'Erreur lors du chargement du détail du ticket.';
       }
     }
 
