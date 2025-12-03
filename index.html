@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <title>Tickets client Zoho Desk</title>
+  <title>Tickets de votre support</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     body {
@@ -33,6 +33,10 @@
     th {
       background: #f9fafb;
       font-weight: 600;
+    }
+    tr:hover {
+      background: #f3f4ff;
+      cursor: pointer;
     }
     .status { font-weight: 600; }
     #error { color: #b91c1c; margin-top: 10px; }
@@ -86,6 +90,8 @@
       table.style.display = 'none';
       noTickets.style.display = 'none';
       tbody.innerHTML = '';
+      detailsCard.style.display = 'none';
+      historyCard.style.display = 'none';
 
       refreshBtn.disabled = true;
       refreshBtn.textContent = 'Chargement...';
@@ -95,11 +101,10 @@
         const data = await res.json();
 
         if (!res.ok) {
-          throw new Error(data.error || 'Erreur API');
+          throw new Error(data.error || 'Erreur API tickets');
         }
 
         const tickets = Array.isArray(data) ? data : [];
-
         if (tickets.length === 0) {
           noTickets.style.display = 'block';
         } else {
@@ -113,17 +118,14 @@
               <td>${t.priority || ''}</td>
               <td>${created}</td>
             `;
-
-            // clic sur la ligne => charger les détails
             tr.addEventListener('click', () => loadDetails(t.id, t.ticketNumber));
-
             tbody.appendChild(tr);
           });
           table.style.display = 'table';
         }
       } catch (e) {
         console.error(e);
-        errorDiv.textContent = 'Erreur lors du chargement des tickets.';
+        errorDiv.textContent = 'Erreur lors du chargement des tickets : ' + (e.message || '');
       } finally {
         refreshBtn.disabled = false;
         refreshBtn.textContent = 'Actualiser';
@@ -132,38 +134,36 @@
 
     async function loadDetails(ticketId, ticketNumber) {
       detailsCard.style.display = 'block';
-      detailsContent.innerHTML = 'Chargement du détail du ticket ' + ticketNumber + '...';
+      detailsContent.innerHTML = 'Chargement du ticket ' + ticketNumber + '...';
+      historyCard.style.display = 'none';
+      historyList.innerHTML = '';
 
       try {
         const res = await fetch('/.netlify/functions/ticketDetails?id=' + encodeURIComponent(ticketId));
         const data = await res.json();
 
         if (!res.ok) {
-          console.error('Erreur détail ticket:', data);
-          throw new Error(data.error || JSON.stringify(data));
+          throw new Error(data.error || 'Erreur API détail');
         }
 
         const created = data.createdTime ? new Date(data.createdTime).toLocaleString() : '';
         const closed = data.closedTime ? new Date(data.closedTime).toLocaleString() : '';
-        // description est souvent en HTML côté Zoho
         const description = data.description || '(Aucune description disponible)';
 
         detailsContent.innerHTML = `
           <p><strong>Ticket #${data.ticketNumber}</strong></p>
           <p><strong>Sujet :</strong> ${data.subject || ''}</p>
           <p><strong>Statut :</strong> ${data.status || ''}</p>
+          <p><strong>Priorité :</strong> ${data.priority || ''}</p>
           <p><strong>Créé le :</strong> ${created}</p>
           ${closed ? `<p><strong>Clôturé le :</strong> ${closed}</p>` : ''}
           <p><strong>Email :</strong> ${data.email || ''}</p>
-          <p><strong>Langue :</strong> ${data.language || ''}</p>
-          <p><strong>Priorité :</strong> ${data.priority || ''}</p>
           <p><strong>Ouvrir dans Zoho Desk :</strong> <a href="${data.webUrl}" target="_blank">voir dans Zoho Desk</a></p>
           <hr />
           <p><strong>Description :</strong></p>
           <div>${description}</div>
         `;
 
-        // Charger aussi l'historique
         loadHistory(ticketId);
       } catch (e) {
         console.error(e);
@@ -173,7 +173,7 @@
 
     async function loadHistory(ticketId) {
       historyCard.style.display = 'block';
-      historyList.innerHTML = '<li>Chargement de l'historique...</li>';
+      historyList.innerHTML = '<li>Chargement de l’historique...</li>';
 
       try {
         const res = await fetch('/.netlify/functions/ticketHistory?id=' + encodeURIComponent(ticketId));
@@ -186,7 +186,7 @@
         const events = Array.isArray(data) ? data : [];
 
         if (events.length === 0) {
-          historyList.innerHTML = '<li>Aucun élément d'historique.</li>';
+          historyList.innerHTML = '<li>Aucun élément d’historique.</li>';
           return;
         }
 
@@ -196,13 +196,12 @@
           const when = ev.eventTime ? new Date(ev.eventTime).toLocaleString() : '';
           const name = ev.eventName || 'Évènement';
           const actor = ev.actor && ev.actor.name ? ` par ${ev.actor.name}` : '';
-
-          li.textContent = `${when} - ${name}${actor}`;
+          li.textContent = `${when} – ${name}${actor}`;
           historyList.appendChild(li);
         });
       } catch (e) {
         console.error(e);
-        historyList.innerHTML = '<li>Erreur lors du chargement de l'historique.</li>';
+        historyList.innerHTML = '<li>Erreur lors du chargement de l’historique.</li>';
       }
     }
 
