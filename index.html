@@ -49,9 +49,9 @@
     }
 
     .app {
-      max-width: 1200px;
+      max-width: 1400px;
       margin: 0 auto;
-      padding: 24px 16px 40px;
+      padding: 28px 18px 48px;
       width: 100%;
     }
 
@@ -209,30 +209,31 @@
       border-collapse: collapse;
       margin-top: 10px;
       font-size: 13px;
-      table-layout: fixed;
-      min-width: 620px;
+      table-layout: auto;
     }
 
     th, td {
       padding: 8px 6px;
       text-align: left;
       border-bottom: 1px solid rgba(15,23,42,0.85);
-      white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      vertical-align: top;
     }
 
-    th:nth-child(2), td:nth-child(2) {
-      max-width: 280px;
-    }
-
+    /* Forcer des colonnes non-wrap pour les identifiants/dates */
+    th:first-child, td:first-child,
     th:nth-child(3), td:nth-child(3),
-    th:nth-child(4), td:nth-child(4) {
-      max-width: 130px;
+    th:nth-child(4), td:nth-child(4),
+    th:nth-child(5), td:nth-child(5) {
+      white-space: nowrap;
     }
 
-    th:nth-child(5), td:nth-child(5) {
-      max-width: 160px;
+    /* Le sujet peut s'étendre sur plusieurs lignes */
+    th:nth-child(2), td:nth-child(2) {
+      white-space: normal;
+      max-width: 420px;
+      word-break: break-word;
     }
 
     th {
@@ -486,6 +487,9 @@
       }
       .callout-title {
         font-size: 15px;
+      }
+      th:nth-child(2), td:nth-child(2) {
+        max-width: 100%;
       }
     }
 
