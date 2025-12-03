@@ -5,7 +5,6 @@ const {
   ZOHO_CLIENT_SECRET,
   ZOHO_REFRESH_TOKEN,
   ZOHO_ORG_ID,
-  ZOHO_ACCOUNT_ID,
   ZOHO_DC
 } = process.env;
 
@@ -34,7 +33,7 @@ async function getAccessToken() {
 
   const data = await res.json();
   if (!res.ok) {
-    console.error("Erreur OAuth:", data);
+    console.error("Erreur OAuth (details):", data);
     throw new Error("Erreur OAuth Zoho");
   }
 
@@ -43,12 +42,20 @@ async function getAccessToken() {
   return cachedAccessToken;
 }
 
-exports.handler = async () => {
+exports.handler = async (event) => {
   try {
-    const token = await getAccessToken();
+    const ticketId =
+      event.queryStringParameters && event.queryStringParameters.id;
+    if (!ticketId) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: "Missing ticket id" }),
+        headers: { "Access-Control-Allow-Origin": "*" }
+      };
+    }
 
-    // Tickets pour TON account unique
-    const url = `${DESK_BASE}/accounts/${ZOHO_ACCOUNT_ID}/tickets`;
+    const token = await getAccessToken();
+    const url = `${DESK_BASE}/tickets/${ticketId}`;
 
     const res = await fetch(url, {
       headers: {
@@ -59,15 +66,17 @@ exports.handler = async () => {
 
     const data = await res.json();
     if (!res.ok) {
-      console.error("Erreur Zoho Desk:", data);
-      throw new Error("Erreur Zoho Desk");
+      console.error("Erreur Zoho Desk (details):", data);
+      return {
+        statusCode: 500,
+        body: JSON.stringify({ error: "Erreur Zoho Desk", details: data }),
+        headers: { "Access-Control-Allow-Origin": "*" }
+      };
     }
-
-    const tickets = Array.isArray(data.data) ? data.data : data;
 
     return {
       statusCode: 200,
-      body: JSON.stringify(tickets),
+      body: JSON.stringify(data),
       headers: { "Access-Control-Allow-Origin": "*" }
     };
   } catch (e) {
