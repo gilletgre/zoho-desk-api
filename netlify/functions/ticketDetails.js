@@ -33,7 +33,7 @@ async function getAccessToken() {
 
   const data = await res.json();
   if (!res.ok) {
-    console.error("Erreur OAuth:", data);
+    console.error("Erreur OAuth (details):", data);
     throw new Error("Erreur OAuth Zoho");
   }
 
@@ -44,15 +44,47 @@ async function getAccessToken() {
 
 exports.handler = async (event) => {
   try {
-    const ticketId = event.queryStringParameters && event.queryStringParameters.id;
+    const ticketId =
+      event.queryStringParameters && event.queryStringParameters.id;
     if (!ticketId) {
       return {
         statusCode: 400,
-        body: JSON.stringify({ error: "Missing ticket id" })
+        body: JSON.stringify({ error: "Missing ticket id" }),
+        headers: { "Access-Control-Allow-Origin": "*" }
       };
     }
 
     const token = await getAccessToken();
     const url = `${DESK_BASE}/tickets/${ticketId}`;
 
-    const res = await fetch(
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Zoho-oauthtoken ${token}`,
+        orgId: ZOHO_ORG_ID
+      }
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      console.error("Erreur Zoho Desk (details):", data);
+      return {
+        statusCode: 500,
+        body: JSON.stringify({ error: "Erreur Zoho Desk", details: data }),
+        headers: { "Access-Control-Allow-Origin": "*" }
+      };
+    }
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify(data),
+      headers: { "Access-Control-Allow-Origin": "*" }
+    };
+  } catch (e) {
+    console.error(e);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: e.message }),
+      headers: { "Access-Control-Allow-Origin": "*" }
+    };
+  }
+};
