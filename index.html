@@ -65,6 +65,11 @@
     <div id="detailsContent"></div>
   </div>
 
+  <div class="card" id="historyCard" style="display:none;">
+    <h2>Historique du ticket</h2>
+    <ul id="historyList" style="padding-left:18px;"></ul>
+  </div>
+
   <script>
     const refreshBtn = document.getElementById('refreshBtn');
     const errorDiv = document.getElementById('error');
@@ -73,6 +78,8 @@
     const noTickets = document.getElementById('noTickets');
     const detailsCard = document.getElementById('detailsCard');
     const detailsContent = document.getElementById('detailsContent');
+    const historyCard = document.getElementById('historyCard');
+    const historyList = document.getElementById('historyList');
 
     async function loadTickets() {
       errorDiv.textContent = '';
@@ -155,9 +162,47 @@
           <p><strong>Description :</strong></p>
           <div>${description}</div>
         `;
+
+        // Charger aussi l'historique
+        loadHistory(ticketId);
       } catch (e) {
         console.error(e);
         detailsContent.innerHTML = 'Erreur lors du chargement du détail du ticket : ' + (e.message || '');
+      }
+    }
+
+    async function loadHistory(ticketId) {
+      historyCard.style.display = 'block';
+      historyList.innerHTML = '<li>Chargement de l'historique...</li>';
+
+      try {
+        const res = await fetch('/.netlify/functions/ticketHistory?id=' + encodeURIComponent(ticketId));
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || 'Erreur API historique');
+        }
+
+        const events = Array.isArray(data) ? data : [];
+
+        if (events.length === 0) {
+          historyList.innerHTML = '<li>Aucun élément d'historique.</li>';
+          return;
+        }
+
+        historyList.innerHTML = '';
+        events.forEach(ev => {
+          const li = document.createElement('li');
+          const when = ev.eventTime ? new Date(ev.eventTime).toLocaleString() : '';
+          const name = ev.eventName || 'Évènement';
+          const actor = ev.actor && ev.actor.name ? ` par ${ev.actor.name}` : '';
+
+          li.textContent = `${when} - ${name}${actor}`;
+          historyList.appendChild(li);
+        });
+      } catch (e) {
+        console.error(e);
+        historyList.innerHTML = '<li>Erreur lors du chargement de l'historique.</li>';
       }
     }
 
