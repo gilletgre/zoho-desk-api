@@ -5,7 +5,9 @@ const {
   ZOHO_CLIENT_SECRET,
   ZOHO_REFRESH_TOKEN,
   ZOHO_ORG_ID,
-  ZOHO_DC
+  ZOHO_DC,
+  AUTH_SECRET,
+  PORTAL_PASSWORD
 } = process.env;
 
 const ACCOUNTS_BASE = `https://accounts.zoho.${ZOHO_DC}`;
@@ -13,6 +15,45 @@ const DESK_BASE = `https://desk.zoho.${ZOHO_DC}/api/v1`;
 
 let cachedAccessToken = null;
 let accessTokenExpiry = 0;
+
+function parseCookies(header = '') {
+  return header.split(';').reduce((acc, part) => {
+    const [key, ...rest] = part.trim().split('=');
+    if (!key) return acc;
+    acc[key] = rest.join('=');
+    return acc;
+  }, {});
+}
+
+function timingSafeEqual(a, b) {
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  if (aBuf.length !== bBuf.length) return false;
+  return require('crypto').timingSafeEqual(aBuf, bBuf);
+}
+
+function verifyAuth(event) {
+  const secret = AUTH_SECRET || PORTAL_PASSWORD;
+  if (!secret) return false;
+  const cookies = parseCookies((event.headers && event.headers.cookie) || '');
+  const token = cookies.authToken;
+  if (!token) return false;
+  const [expStr, signature] = token.split('.');
+  const expiresAt = Number(expStr);
+  if (!expStr || !signature || Number.isNaN(expiresAt) || expiresAt < Date.now()) {
+    return false;
+  }
+  const expected = require('crypto').createHmac('sha256', secret).update(expStr).digest('hex');
+  return timingSafeEqual(expected, signature);
+}
+
+function unauthorized() {
+  return {
+    statusCode: 401,
+    body: JSON.stringify({ error: 'Non authentifié' }),
+    headers: { "Access-Control-Allow-Origin": "*" }
+  };
+}
 
 async function getAccessToken() {
   const now = Date.now();
@@ -43,6 +84,10 @@ async function getAccessToken() {
 }
 
 exports.handler = async (event) => {
+  if (!verifyAuth(event)) {
+    return unauthorized();
+  }
+
   try {
     const ticketId =
       event.queryStringParameters && event.queryStringParameters.id;
