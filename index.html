@@ -464,6 +464,42 @@
       font-weight: 500;
     }
 
+    .debug-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .debug-tab {
+      border: 1px solid var(--border-subtle);
+      background: rgba(59,130,246,0.06);
+      color: var(--text-main);
+      padding: 6px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .debug-tab.active {
+      border-color: rgba(59,130,246,0.6);
+      background: rgba(59,130,246,0.15);
+    }
+
+    .debug-pre {
+      background: var(--bg-soft);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 12px;
+      color: var(--text-main);
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 12px;
+      max-height: 360px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
     /* Statistiques */
     .stat-grid {
       display: grid;
@@ -690,6 +726,22 @@
           <h2>Historique du ticket</h2>
           <ul id="historyList"></ul>
         </div>
+
+        <div class="card" id="debugCard" style="display:none;">
+          <div class="tickets-header" style="margin-bottom:8px;">
+            <div>
+              <h2>Données API brutes</h2>
+              <p class="subtitle">Inspectez tout ce que Zoho renvoie pour ce ticket.</p>
+            </div>
+            <span class="pill">Vue debug</span>
+          </div>
+          <div class="debug-tabs">
+            <button class="debug-tab active" data-tab="details">Ticket</button>
+            <button class="debug-tab" data-tab="history">Historique</button>
+          </div>
+          <pre class="debug-pre" id="debugDetails"></pre>
+          <pre class="debug-pre" id="debugHistory" style="display:none;"></pre>
+        </div>
       </section>
     </main>
   </div>
@@ -704,6 +756,10 @@
     const detailsContent = document.getElementById('detailsContent');
     const historyCard = document.getElementById('historyCard');
     const historyList = document.getElementById('historyList');
+    const debugCard = document.getElementById('debugCard');
+    const debugDetails = document.getElementById('debugDetails');
+    const debugHistory = document.getElementById('debugHistory');
+    const debugTabs = Array.from(document.querySelectorAll('.debug-tab'));
     const statTotal = document.getElementById('statTotal');
     const statOpen = document.getElementById('statOpen');
     const statClosed = document.getElementById('statClosed');
@@ -713,6 +769,8 @@
     const authSubmit = document.getElementById('authSubmit');
     const authError = document.getElementById('authError');
     let ticketsCache = [];
+    let lastDetails = null;
+    let lastHistory = null;
 
     function showAuth(message = '') {
       authOverlay.style.display = 'flex';
@@ -887,6 +945,9 @@
       detailsContent.innerHTML = 'Chargement du ticket ' + ticketNumber + '...';
       historyCard.style.display = 'none';
       historyList.innerHTML = '';
+      debugCard.style.display = 'none';
+      lastDetails = null;
+      lastHistory = null;
 
       try {
         const res = await fetch('/.netlify/functions/ticketDetails?id=' + encodeURIComponent(ticketId), {
@@ -972,6 +1033,8 @@
             <div class="callout-body">${description}</div>
           </div>
         `;
+        lastDetails = data;
+        renderDebug();
 
         loadHistory(ticketId);
       } catch (e) {
@@ -1013,11 +1076,41 @@
           li.innerHTML = `<span class="history-time">${when}</span> - ${name}${actor}`;
           historyList.appendChild(li);
         });
+        lastHistory = events;
+        renderDebug();
       } catch (e) {
         console.error(e);
         historyList.innerHTML = '<li>Erreur lors du chargement de l\'historique.</li>';
+        lastHistory = null;
+        renderDebug();
       }
     }
+
+    function renderDebug() {
+      if (!lastDetails && !lastHistory) {
+        debugCard.style.display = 'none';
+        return;
+      }
+
+      debugCard.style.display = 'block';
+      debugDetails.textContent = lastDetails ? JSON.stringify(lastDetails, null, 2) : 'Aucune donnée de ticket.';
+      debugHistory.textContent = lastHistory ? JSON.stringify(lastHistory, null, 2) : 'Aucun historique chargé.';
+    }
+
+    debugTabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        debugTabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const target = tab.dataset.tab;
+        if (target === 'history') {
+          debugDetails.style.display = 'none';
+          debugHistory.style.display = 'block';
+        } else {
+          debugDetails.style.display = 'block';
+          debugHistory.style.display = 'none';
+        }
+      });
+    });
 
     refreshBtn.addEventListener('click', loadTickets);
     authSubmit.addEventListener('click', login);

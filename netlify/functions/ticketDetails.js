@@ -100,7 +100,9 @@ exports.handler = async (event) => {
     }
 
     const token = await getAccessToken();
-    const url = `${DESK_BASE}/tickets/${ticketId}`;
+    // Inclut les entités liées pour offrir le plus d'infos en un seul appel
+    const include = 'contacts,assignee,team,department,product,collaborators';
+    const url = `${DESK_BASE}/tickets/${ticketId}?include=${encodeURIComponent(include)}`;
 
     const res = await fetch(url, {
       headers: {
