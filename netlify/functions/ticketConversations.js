@@ -142,56 +142,78 @@ exports.handler = async (event) => {
       const conv = list[i];
       if (!conv || !conv.id) continue;
       try {
-        // Selon la doc Zoho, le détail se récupère via /conversations/{id}
-        const detailUrl = `${DESK_BASE}/conversations/${conv.id}?include=all`;
-        let detailRes = await fetch(detailUrl, {
-          headers: {
-            Authorization: `Zoho-oauthtoken ${token}`,
-            orgId: ZOHO_ORG_ID
+        // On tente plusieurs endpoints pour récupérer le body
+        const candidates = [
+          `${DESK_BASE}/conversations/${conv.id}?include=content,all`,
+          `${DESK_BASE}/tickets/${ticketId}/conversations/${conv.id}?include=content,all`,
+          `${DESK_BASE}/conversations/${conv.id}/content`
+        ];
+
+        let success = false;
+        let detailData = null;
+        let detailUrlTried = null;
+        let lastStatus = null;
+        let lastPayload = null;
+
+        for (const detailUrl of candidates) {
+          detailUrlTried = detailUrl;
+          let detailRes;
+          try {
+            detailRes = await fetch(detailUrl, {
+              headers: {
+                Authorization: `Zoho-oauthtoken ${token}`,
+                orgId: ZOHO_ORG_ID
+              }
+            });
+          } catch (errFetch) {
+            lastStatus = 'fetch-error';
+            lastPayload = errFetch.message || String(errFetch);
+            continue;
           }
-        });
 
-        let detailData;
-        try {
-          detailData = await detailRes.json();
-        } catch (parseErr) {
-          detailData = { parseError: parseErr.message || 'Parse error' };
-        }
-
-        // Fallback si 404/4xx : essayer l'endpoint imbriqué sous tickets/{id}
-        if (!detailRes.ok && detailRes.status >= 400 && detailRes.status < 500) {
-          const altDetailUrl = `${DESK_BASE}/tickets/${ticketId}/conversations/${conv.id}?include=all`;
-          detailRes = await fetch(altDetailUrl, {
-            headers: {
-              Authorization: `Zoho-oauthtoken ${token}`,
-              orgId: ZOHO_ORG_ID
-            }
-          });
+          lastStatus = detailRes.status;
           try {
             detailData = await detailRes.json();
           } catch (parseErr) {
             detailData = { parseError: parseErr.message || 'Parse error' };
           }
-          if (detailRes.ok) {
-            withBodies.push({ ...detailData, detailUrl: altDetailUrl });
-            continue;
+
+          if (detailRes.ok && detailData) {
+            withBodies.push({ ...detailData, detailUrl });
+            success = true;
+            break;
+          } else {
+            lastPayload = detailData;
           }
-          // si toujours pas ok, pousse l'erreur
-          withBodies.push({ ...conv, error: "Detail fetch failed", detailUrl: altDetailUrl, details: detailData });
-          continue;
         }
 
-        if (detailRes.ok) {
-          withBodies.push({ ...detailData, detailUrl });
-        } else {
-          withBodies.push({ ...conv, error: "Detail fetch failed", detailUrl, details: detailData });
+        if (!success) {
+          withBodies.push({ ...conv, error: "Detail fetch failed", lastStatus, detailUrl: detailUrlTried, details: lastPayload });
         }
       } catch (err) {
-        withBodies.push({ ...conv, error: err.message || 'Detail fetch error', detailUrl });
+        withBodies.push({ ...conv, error: err.message || 'Detail fetch error' });
       }
     }
 
-    const conversations = withBodies.length > 0 ? withBodies : list;
+    // Si aucun body récupéré, on tente les threads comme fallback (contient parfois le contenu complet)
+    let conversations = withBodies.length > 0 ? withBodies : list;
+
+    if (withBodies.length === 0) {
+      try {
+        const threadsRes = await fetch(`${DESK_BASE}/tickets/${ticketId}/threads?include=all`, {
+          headers: {
+            Authorization: `Zoho-oauthtoken ${token}`,
+            orgId: ZOHO_ORG_ID
+          }
+        });
+        const threadsData = await threadsRes.json();
+        conversations = Array.isArray(conversations) ? conversations : [conversations];
+        conversations.push({ threads: threadsData, source: 'threads_fallback' });
+      } catch (err) {
+        conversations = Array.isArray(conversations) ? conversations : [conversations];
+        conversations.push({ threadsError: err.message || 'threads fetch error' });
+      }
+    }
 
     return {
       statusCode: 200,
@@ -206,4 +228,3 @@ exports.handler = async (event) => {
       headers: { "Access-Control-Allow-Origin": "*" }
     };
   }
-};

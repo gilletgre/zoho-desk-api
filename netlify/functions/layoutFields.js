@@ -104,6 +104,7 @@ exports.handler = async (event) => {
     const urlWithFields = `${DESK_BASE}/layouts/${layoutId}?include=fields`;
     const urlFallback = `${DESK_BASE}/layouts/${layoutId}`;
 
+    // Première tentative : include=fields
     const res = await fetch(urlWithFields, {
       headers: {
         Authorization: `Zoho-oauthtoken ${token}`,
