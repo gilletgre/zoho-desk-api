@@ -774,6 +774,7 @@
     let lastLayoutFields = null;
     let lastConversations = null;
     let lastThreads = null;
+    let lastMessages = null;
 
     function showAuth(message = '') {
       authOverlay.style.display = 'flex';
@@ -954,6 +955,7 @@
       lastLayoutFields = null;
       lastConversations = null;
       lastThreads = null;
+      lastMessages = null;
 
       try {
         const res = await fetch('/.netlify/functions/ticketDetails?id=' + encodeURIComponent(ticketId), {
@@ -1056,6 +1058,7 @@
         }
         loadConversations(ticketId);
         loadThreads(ticketId);
+        loadMessages(ticketId);
         renderInitialContent();
       } catch (e) {
         console.error(e);
@@ -1126,6 +1129,25 @@
       }
     }
 
+    async function loadMessages(ticketId) {
+      try {
+        const res = await fetch('/.netlify/functions/ticketMessages?id=' + encodeURIComponent(ticketId), {
+          credentials: 'same-origin'
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error((data && data.error) || 'Erreur messages');
+        }
+        lastMessages = data;
+        renderDebug();
+        renderInitialContent();
+      } catch (e) {
+        console.error('Erreur loadMessages', e);
+        lastMessages = { error: e.message || 'Erreur' };
+        renderDebug();
+      }
+    }
+
     async function loadThreads(ticketId) {
       try {
         const res = await fetch('/.netlify/functions/ticketThreads?id=' + encodeURIComponent(ticketId), {
@@ -1166,7 +1188,7 @@
     }
 
     function renderDebug() {
-      if (!lastDetails && !lastHistory && !lastLayoutFields && !lastConversations && !lastThreads) {
+      if (!lastDetails && !lastHistory && !lastLayoutFields && !lastConversations && !lastThreads && !lastMessages) {
         debugCard.style.display = 'none';
         return;
       }
@@ -1177,7 +1199,8 @@
         cf: (lastDetails && (lastDetails.cf || lastDetails.customFields)) || {},
         layoutId: lastDetails && (lastDetails.layoutId || (lastDetails.layoutDetails && lastDetails.layoutDetails.id)),
         layoutFields: lastLayoutFields || '(non chargé)',
-        threads: lastThreads || '(non chargé)'
+        threads: lastThreads || '(non chargé)',
+        messages: lastMessages || '(non chargé)'
       };
       debugDetails.textContent = lastDetails ? JSON.stringify(composite, null, 2) : 'Aucune donnée de ticket.';
       debugHistory.textContent = lastHistory ? JSON.stringify(lastHistory, null, 2) : 'Aucun historique chargé.';
@@ -1216,6 +1239,13 @@
         if (c) {
           return { content: c, source: 'Thread (ticket)' };
         }
+      }
+
+      const msgs = Array.isArray(lastMessages) ? lastMessages : [];
+      if (msgs.length > 0) {
+        const m = msgs.find(x => (x.direction || '').toLowerCase() === 'in') || msgs[0];
+        const c = m && (m.content || m.body || m.description || m.contentPlainText || m.mailContent || m.summary);
+        if (c) return { content: c, source: 'Message' };
       }
 
       if (Array.isArray(lastConversations)) {
