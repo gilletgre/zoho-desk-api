@@ -1248,6 +1248,26 @@
         if (c) return { content: c, source: 'Message' };
       }
 
+      // 4) historique : propriété "Content" (ex: notes/commentaires)
+      const hist = Array.isArray(lastHistory) ? lastHistory : [];
+      for (let i = 0; i < hist.length; i++) {
+        const ev = hist[i];
+        const info = Array.isArray(ev.eventInfo) ? ev.eventInfo : [];
+        const contentProp = info.find(p => (p.propertyName || '').toLowerCase() === 'content');
+        if (contentProp && contentProp.propertyValue) {
+          const pv = contentProp.propertyValue;
+          if (typeof pv === 'string' && pv) {
+            return { content: pv, source: 'Historique (Content)' };
+          }
+          if (pv.updatedValue && typeof pv.updatedValue === 'string') {
+            return { content: pv.updatedValue, source: 'Historique (Content mis à jour)' };
+          }
+          if (pv.previousValue && typeof pv.previousValue === 'string') {
+            return { content: pv.previousValue, source: 'Historique (Content précédent)' };
+          }
+        }
+      }
+
       if (Array.isArray(lastConversations)) {
         const conv = lastConversations.find(c => (c.direction || '').toLowerCase() === 'in') || lastConversations[0];
         if (conv) {
