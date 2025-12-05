@@ -773,6 +773,7 @@
     let lastHistory = null;
     let lastLayoutFields = null;
     let lastConversations = null;
+    let lastThreads = null;
 
     function showAuth(message = '') {
       authOverlay.style.display = 'flex';
@@ -952,6 +953,7 @@
       lastHistory = null;
       lastLayoutFields = null;
       lastConversations = null;
+      lastThreads = null;
 
       try {
         const res = await fetch('/.netlify/functions/ticketDetails?id=' + encodeURIComponent(ticketId), {
@@ -1033,6 +1035,12 @@
             <div class="callout-body">${resolution}</div>
           </div>
 
+          <div class="callout" id="initialContent">
+            <div class="callout-label">Contenu initial</div>
+            <div class="callout-body" id="initialContentBody">Recherche du contenu...</div>
+            <div class="meta-label" id="initialContentSource"></div>
+          </div>
+
           <div class="callout">
             <div class="callout-label">Description</div>
             <div class="callout-body">${description}</div>
@@ -1047,6 +1055,8 @@
           loadLayoutFields(data.layoutId);
         }
         loadConversations(ticketId);
+        loadThreads(ticketId);
+        renderInitialContent();
       } catch (e) {
         console.error(e);
         const msg = e && e.message ? e.message : '';
@@ -1108,10 +1118,31 @@
         }
         lastConversations = data;
         renderDebug();
+        renderInitialContent();
       } catch (e) {
         console.error('Erreur loadConversations', e);
         lastConversations = { error: e.message || 'Erreur' };
         renderDebug();
+      }
+    }
+
+    async function loadThreads(ticketId) {
+      try {
+        const res = await fetch('/.netlify/functions/ticketThreads?id=' + encodeURIComponent(ticketId), {
+          credentials: 'same-origin'
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error((data && data.error) || 'Erreur threads');
+        }
+        lastThreads = data;
+        renderDebug();
+        renderInitialContent();
+      } catch (e) {
+        console.error('Erreur loadThreads', e);
+        lastThreads = { error: e.message || 'Erreur' };
+        renderDebug();
+        renderInitialContent();
       }
     }
 
@@ -1135,7 +1166,7 @@
     }
 
     function renderDebug() {
-      if (!lastDetails && !lastHistory && !lastLayoutFields && !lastConversations) {
+      if (!lastDetails && !lastHistory && !lastLayoutFields && !lastConversations && !lastThreads) {
         debugCard.style.display = 'none';
         return;
       }
@@ -1145,7 +1176,8 @@
         ticket: lastDetails || '(vide)',
         cf: (lastDetails && (lastDetails.cf || lastDetails.customFields)) || {},
         layoutId: lastDetails && (lastDetails.layoutId || (lastDetails.layoutDetails && lastDetails.layoutDetails.id)),
-        layoutFields: lastLayoutFields || '(non chargé)'
+        layoutFields: lastLayoutFields || '(non chargé)',
+        threads: lastThreads || '(non chargé)'
       };
       debugDetails.textContent = lastDetails ? JSON.stringify(composite, null, 2) : 'Aucune donnée de ticket.';
       debugHistory.textContent = lastHistory ? JSON.stringify(lastHistory, null, 2) : 'Aucun historique chargé.';
@@ -1163,6 +1195,55 @@
           ? JSON.stringify({ ...composite, conversations: lastConversations }, null, 2)
           : convText;
       }
+    }
+
+    function stripHtml(html = '') {
+      return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+
+    function pickInitialContent() {
+      if (lastDetails && lastDetails.description) {
+        return { content: lastDetails.description, source: 'Description (ticket)' };
+      }
+
+      const threadsArr = Array.isArray(lastThreads) ? lastThreads : [];
+      const inbound = threadsArr.find(t => {
+        const dir = (t.direction || '').toLowerCase();
+        return dir === 'in' || dir === 'incoming';
+      }) || threadsArr[0];
+      if (inbound) {
+        const c = inbound.content || inbound.body || inbound.description || inbound.contentPlainText || inbound.mailContent;
+        if (c) {
+          return { content: c, source: 'Thread (ticket)' };
+        }
+      }
+
+      if (Array.isArray(lastConversations)) {
+        const conv = lastConversations.find(c => (c.direction || '').toLowerCase() === 'in') || lastConversations[0];
+        if (conv) {
+          const c = conv.content || conv.body || conv.description || conv.contentPlainText || conv.mailContent || conv.summary;
+          if (c) return { content: c, source: 'Conversation' };
+        }
+      }
+
+      return { content: '', source: '' };
+    }
+
+    function renderInitialContent() {
+      const bodyEl = document.getElementById('initialContentBody');
+      const srcEl = document.getElementById('initialContentSource');
+      if (!bodyEl || !srcEl) return;
+
+      const { content, source } = pickInitialContent();
+      if (!content) {
+        bodyEl.textContent = 'Contenu initial non trouvé pour ce ticket.';
+        srcEl.textContent = '';
+        return;
+      }
+
+      const textVersion = stripHtml(content);
+      bodyEl.textContent = textVersion || content;
+      srcEl.textContent = source ? `Source : ${source}` : '';
     }
 
     debugTabs.forEach(tab => {
