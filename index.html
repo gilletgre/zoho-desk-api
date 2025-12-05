@@ -1226,6 +1226,21 @@
       return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
     }
 
+    function pickSummary() {
+      if (lastDetails && lastDetails.summary) return lastDetails.summary;
+      const convs = Array.isArray(lastConversations) ? lastConversations : [];
+      const msgs = Array.isArray(lastMessages) ? lastMessages : [];
+      if (convs.length) {
+        const c = convs.find(x => x.summary) || convs[0];
+        if (c && c.summary) return c.summary;
+      }
+      if (msgs.length) {
+        const m = msgs.find(x => x.summary) || msgs[0];
+        if (m && m.summary) return m.summary;
+      }
+      return '';
+    }
+
     function pickHistoryContent() {
       const hist = Array.isArray(lastHistory) ? lastHistory : [];
       for (let i = 0; i < hist.length; i++) {
@@ -1275,6 +1290,11 @@
     }
 
     function pickInitialContent() {
+      const summary = pickSummary();
+      if (summary) {
+        return { content: summary, source: 'Résumé' };
+      }
+
       if (lastDetails && lastDetails.description) {
         return { content: lastDetails.description, source: 'Description (ticket)' };
       }
