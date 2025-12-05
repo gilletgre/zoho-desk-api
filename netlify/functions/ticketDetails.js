@@ -88,6 +88,17 @@ exports.handler = async (event) => {
     return unauthorized();
   }
 
+  async function fetchTicket(url, token) {
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Zoho-oauthtoken ${token}`,
+        orgId: ZOHO_ORG_ID
+      }
+    });
+    const data = await res.json();
+    return { res, data };
+  }
+
   try {
     const ticketId =
       event.queryStringParameters && event.queryStringParameters.id;
@@ -100,18 +111,20 @@ exports.handler = async (event) => {
     }
 
     const token = await getAccessToken();
-    // Inclut les entités liées pour offrir le plus d'infos en un seul appel
+    // Inclut les entités liées pour offrir le plus d'infos en un seul appel.
+    // Si Zoho répond une erreur (layout/perms/include non supporté), on retente sans include.
     const include = 'contacts,assignee,team,department,product,collaborators';
-    const url = `${DESK_BASE}/tickets/${ticketId}?include=${encodeURIComponent(include)}`;
+    const urlWithInclude = `${DESK_BASE}/tickets/${ticketId}?include=${encodeURIComponent(include)}`;
+    const urlFallback = `${DESK_BASE}/tickets/${ticketId}`;
 
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Zoho-oauthtoken ${token}`,
-        orgId: ZOHO_ORG_ID
-      }
-    });
+    let { res, data } = await fetchTicket(urlWithInclude, token);
 
-    const data = await res.json();
+    // Fallback si l'API refuse l'include (ex: 400/401/403 ou code spécifique)
+    if (!res.ok && res.status >= 400 && res.status < 500) {
+      console.warn("Include rejected, retrying without include", { status: res.status, data });
+      ({ res, data } = await fetchTicket(urlFallback, token));
+    }
+
     if (!res.ok) {
       console.error("Erreur Zoho Desk (details):", data);
       return {
