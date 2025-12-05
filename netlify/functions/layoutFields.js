@@ -99,8 +99,9 @@ exports.handler = async (event) => {
     }
 
     const token = await getAccessToken();
-    // L'API ne supporte pas /fields, il faut récupérer le layout complet puis extraire les sections/champs.
-    const url = `${DESK_BASE}/layouts/${layoutId}?module=tickets`;
+    // Récupère le layout complet puis extrait sections/champs.
+    // NB: ne pas passer ?module=... (Zoho retourne UNPROCESSABLE_ENTITY)
+    const url = `${DESK_BASE}/layouts/${layoutId}`;
 
     const res = await fetch(url, {
       headers: {

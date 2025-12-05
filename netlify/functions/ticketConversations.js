@@ -101,16 +101,29 @@ exports.handler = async (event) => {
 
     const token = await getAccessToken();
     // include=all pour tenter de récupérer le contenu complet des messages
-    const url = `${DESK_BASE}/tickets/${ticketId}/conversations?include=all`;
+    let url = `${DESK_BASE}/tickets/${ticketId}/conversations?include=all`;
 
-    const res = await fetch(url, {
+    let res = await fetch(url, {
       headers: {
         Authorization: `Zoho-oauthtoken ${token}`,
         orgId: ZOHO_ORG_ID
       }
     });
 
-    const data = await res.json();
+    let data = await res.json();
+    // Fallback sans include si erreur 4xx
+    if (!res.ok && res.status >= 400 && res.status < 500) {
+      console.warn("Include=all rejected, retrying without include", { status: res.status, data });
+      url = `${DESK_BASE}/tickets/${ticketId}/conversations`;
+      res = await fetch(url, {
+        headers: {
+          Authorization: `Zoho-oauthtoken ${token}`,
+          orgId: ZOHO_ORG_ID
+        }
+      });
+      data = await res.json();
+    }
+
     if (!res.ok) {
       console.error("Erreur Zoho Desk (conversations):", { status: res.status, data });
       return {
