@@ -771,6 +771,8 @@
     let ticketsCache = [];
     let lastDetails = null;
     let lastHistory = null;
+    let lastLayoutFields = null;
+    let lastConversations = null;
 
     function showAuth(message = '') {
       authOverlay.style.display = 'flex';
@@ -949,6 +951,7 @@
       lastDetails = null;
       lastHistory = null;
       lastLayoutFields = null;
+      lastConversations = null;
 
       try {
         const res = await fetch('/.netlify/functions/ticketDetails?id=' + encodeURIComponent(ticketId), {
@@ -1043,6 +1046,7 @@
         if (data && data.layoutId) {
           loadLayoutFields(data.layoutId);
         }
+        loadConversations(ticketId);
       } catch (e) {
         console.error(e);
         const msg = e && e.message ? e.message : '';
@@ -1093,6 +1097,24 @@
       }
     }
 
+    async function loadConversations(ticketId) {
+      try {
+        const res = await fetch('/.netlify/functions/ticketConversations?id=' + encodeURIComponent(ticketId), {
+          credentials: 'same-origin'
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error((data && data.error) || 'Erreur conversations');
+        }
+        lastConversations = data;
+        renderDebug();
+      } catch (e) {
+        console.error('Erreur loadConversations', e);
+        lastConversations = { error: e.message || 'Erreur' };
+        renderDebug();
+      }
+    }
+
     async function loadLayoutFields(layoutId) {
       try {
         const res = await fetch('/.netlify/functions/layoutFields?layoutId=' + encodeURIComponent(layoutId), {
@@ -1100,7 +1122,8 @@
         });
         const data = await res.json();
         if (!res.ok) {
-          throw new Error((data && data.error) || 'Erreur champs layout');
+          const detail = data && data.details ? JSON.stringify(data.details) : '';
+          throw new Error(((data && data.error) || 'Erreur champs layout') + (detail ? ' ' + detail : ''));
         }
         lastLayoutFields = data;
         renderDebug();
@@ -1112,7 +1135,7 @@
     }
 
     function renderDebug() {
-      if (!lastDetails && !lastHistory && !lastLayoutFields) {
+      if (!lastDetails && !lastHistory && !lastLayoutFields && !lastConversations) {
         debugCard.style.display = 'none';
         return;
       }
@@ -1126,6 +1149,20 @@
       };
       debugDetails.textContent = lastDetails ? JSON.stringify(composite, null, 2) : 'Aucune donnée de ticket.';
       debugHistory.textContent = lastHistory ? JSON.stringify(lastHistory, null, 2) : 'Aucun historique chargé.';
+      if (lastConversations) {
+        let convText = '';
+        if (Array.isArray(lastConversations)) {
+          const first = lastConversations[0];
+          convText = JSON.stringify(first, null, 2);
+        } else {
+          convText = JSON.stringify(lastConversations, null, 2);
+        }
+        // Reuse history pre block for simplicity if tabs not switched
+        // We keep conversations in details block to avoid extra tab.
+        debugDetails.textContent = lastDetails
+          ? JSON.stringify({ ...composite, conversations: lastConversations }, null, 2)
+          : convText;
+      }
     }
 
     debugTabs.forEach(tab => {

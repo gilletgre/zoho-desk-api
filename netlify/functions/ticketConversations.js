@@ -74,7 +74,7 @@ async function getAccessToken() {
 
   const data = await res.json();
   if (!res.ok) {
-    console.error("Erreur OAuth (layoutFields):", data);
+    console.error("Erreur OAuth (ticketConversations):", data);
     throw new Error("Erreur OAuth Zoho");
   }
 
@@ -89,17 +89,18 @@ exports.handler = async (event) => {
   }
 
   try {
-    const layoutId = event.queryStringParameters && event.queryStringParameters.layoutId;
-    if (!layoutId) {
+    const ticketId =
+      event.queryStringParameters && event.queryStringParameters.id;
+    if (!ticketId) {
       return {
         statusCode: 400,
-        body: JSON.stringify({ error: "Missing layoutId" }),
+        body: JSON.stringify({ error: "Missing ticket id" }),
         headers: { "Access-Control-Allow-Origin": "*" }
       };
     }
 
     const token = await getAccessToken();
-    const url = `${DESK_BASE}/layouts/${layoutId}/fields?module=tickets`;
+    const url = `${DESK_BASE}/tickets/${ticketId}/conversations`;
 
     const res = await fetch(url, {
       headers: {
@@ -110,7 +111,7 @@ exports.handler = async (event) => {
 
     const data = await res.json();
     if (!res.ok) {
-      console.error("Erreur Zoho Desk (layoutFields):", { status: res.status, data });
+      console.error("Erreur Zoho Desk (conversations):", { status: res.status, data });
       return {
         statusCode: res.status,
         body: JSON.stringify({ error: "Erreur Zoho Desk", status: res.status, details: data }),
@@ -118,9 +119,12 @@ exports.handler = async (event) => {
       };
     }
 
+    // Normalise pour le front
+    const conversations = Array.isArray(data.data) ? data.data : data;
+
     return {
       statusCode: 200,
-      body: JSON.stringify(data),
+      body: JSON.stringify(conversations),
       headers: { "Access-Control-Allow-Origin": "*" }
     };
   } catch (e) {
