@@ -104,7 +104,7 @@ exports.handler = async (event) => {
     const urlWithFields = `${DESK_BASE}/layouts/${layoutId}?include=fields`;
     const urlFallback = `${DESK_BASE}/layouts/${layoutId}`;
 
-    const res = await fetch(url, {
+    const res = await fetch(urlWithFields, {
       headers: {
         Authorization: `Zoho-oauthtoken ${token}`,
         orgId: ZOHO_ORG_ID

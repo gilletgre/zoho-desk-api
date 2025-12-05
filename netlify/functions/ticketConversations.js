@@ -144,20 +144,50 @@ exports.handler = async (event) => {
       try {
         // Selon la doc Zoho, le détail se récupère via /conversations/{id}
         const detailUrl = `${DESK_BASE}/conversations/${conv.id}?include=all`;
-        const detailRes = await fetch(detailUrl, {
+        let detailRes = await fetch(detailUrl, {
           headers: {
             Authorization: `Zoho-oauthtoken ${token}`,
             orgId: ZOHO_ORG_ID
           }
         });
-        const detailData = await detailRes.json();
+
+        let detailData;
+        try {
+          detailData = await detailRes.json();
+        } catch (parseErr) {
+          detailData = { parseError: parseErr.message || 'Parse error' };
+        }
+
+        // Fallback si 404/4xx : essayer l'endpoint imbriqué sous tickets/{id}
+        if (!detailRes.ok && detailRes.status >= 400 && detailRes.status < 500) {
+          const altDetailUrl = `${DESK_BASE}/tickets/${ticketId}/conversations/${conv.id}?include=all`;
+          detailRes = await fetch(altDetailUrl, {
+            headers: {
+              Authorization: `Zoho-oauthtoken ${token}`,
+              orgId: ZOHO_ORG_ID
+            }
+          });
+          try {
+            detailData = await detailRes.json();
+          } catch (parseErr) {
+            detailData = { parseError: parseErr.message || 'Parse error' };
+          }
+          if (detailRes.ok) {
+            withBodies.push({ ...detailData, detailUrl: altDetailUrl });
+            continue;
+          }
+          // si toujours pas ok, pousse l'erreur
+          withBodies.push({ ...conv, error: "Detail fetch failed", detailUrl: altDetailUrl, details: detailData });
+          continue;
+        }
+
         if (detailRes.ok) {
-          withBodies.push(detailData);
+          withBodies.push({ ...detailData, detailUrl });
         } else {
-          withBodies.push({ ...conv, error: "Detail fetch failed", details: detailData });
+          withBodies.push({ ...conv, error: "Detail fetch failed", detailUrl, details: detailData });
         }
       } catch (err) {
-        withBodies.push({ ...conv, error: err.message || 'Detail fetch error' });
+        withBodies.push({ ...conv, error: err.message || 'Detail fetch error', detailUrl });
       }
     }
 
