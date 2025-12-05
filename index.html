@@ -1279,6 +1279,11 @@
         return { content: lastDetails.description, source: 'Description (ticket)' };
       }
 
+      // 0) summary du ticket (souvent corps condensé du mail)
+      if (lastDetails && lastDetails.summary) {
+        return { content: lastDetails.summary, source: 'Résumé (ticket)' };
+      }
+
       const threadsArr = Array.isArray(lastThreads) ? lastThreads : [];
       const inbound = threadsArr.find(t => {
         const dir = (t.direction || '').toLowerCase();
