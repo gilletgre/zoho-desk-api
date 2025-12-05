@@ -948,6 +948,7 @@
       debugCard.style.display = 'none';
       lastDetails = null;
       lastHistory = null;
+      lastLayoutFields = null;
 
       try {
         const res = await fetch('/.netlify/functions/ticketDetails?id=' + encodeURIComponent(ticketId), {
@@ -1038,6 +1039,10 @@
         renderDebug();
 
         loadHistory(ticketId);
+        // Précharge les champs du layout pour aider à mapper les cf
+        if (data && data.layoutId) {
+          loadLayoutFields(data.layoutId);
+        }
       } catch (e) {
         console.error(e);
         const msg = e && e.message ? e.message : '';
@@ -1088,14 +1093,38 @@
       }
     }
 
+    async function loadLayoutFields(layoutId) {
+      try {
+        const res = await fetch('/.netlify/functions/layoutFields?layoutId=' + encodeURIComponent(layoutId), {
+          credentials: 'same-origin'
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error((data && data.error) || 'Erreur champs layout');
+        }
+        lastLayoutFields = data;
+        renderDebug();
+      } catch (e) {
+        console.error('Erreur loadLayoutFields', e);
+        lastLayoutFields = { error: e.message || 'Erreur' };
+        renderDebug();
+      }
+    }
+
     function renderDebug() {
-      if (!lastDetails && !lastHistory) {
+      if (!lastDetails && !lastHistory && !lastLayoutFields) {
         debugCard.style.display = 'none';
         return;
       }
 
       debugCard.style.display = 'block';
-      debugDetails.textContent = lastDetails ? JSON.stringify(lastDetails, null, 2) : 'Aucune donnée de ticket.';
+      const composite = {
+        ticket: lastDetails || '(vide)',
+        cf: (lastDetails && (lastDetails.cf || lastDetails.customFields)) || {},
+        layoutId: lastDetails && (lastDetails.layoutId || (lastDetails.layoutDetails && lastDetails.layoutDetails.id)),
+        layoutFields: lastLayoutFields || '(non chargé)'
+      };
+      debugDetails.textContent = lastDetails ? JSON.stringify(composite, null, 2) : 'Aucune donnée de ticket.';
       debugHistory.textContent = lastHistory ? JSON.stringify(lastHistory, null, 2) : 'Aucun historique chargé.';
     }
 
@@ -1130,3 +1159,4 @@
   </script>
 </body>
 </html>
+    let lastLayoutFields = null;
