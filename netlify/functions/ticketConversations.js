@@ -134,7 +134,33 @@ exports.handler = async (event) => {
     }
 
     // Normalise pour le front
-    const conversations = Array.isArray(data.data) ? data.data : data;
+    const list = Array.isArray(data.data) ? data.data : data;
+
+    // Tentative de récupérer le corps HTML/texte des conversations (premières uniquement pour limiter le coût)
+    const withBodies = [];
+    for (let i = 0; i < Math.min(list.length, 3); i++) {
+      const conv = list[i];
+      if (!conv || !conv.id) continue;
+      try {
+        const detailUrl = `${DESK_BASE}/tickets/${ticketId}/conversations/${conv.id}?include=all`;
+        const detailRes = await fetch(detailUrl, {
+          headers: {
+            Authorization: `Zoho-oauthtoken ${token}`,
+            orgId: ZOHO_ORG_ID
+          }
+        });
+        const detailData = await detailRes.json();
+        if (detailRes.ok) {
+          withBodies.push(detailData);
+        } else {
+          withBodies.push({ ...conv, error: "Detail fetch failed", details: detailData });
+        }
+      } catch (err) {
+        withBodies.push({ ...conv, error: err.message || 'Detail fetch error' });
+      }
+    }
+
+    const conversations = withBodies.length > 0 ? withBodies : list;
 
     return {
       statusCode: 200,

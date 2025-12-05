@@ -129,7 +129,8 @@ exports.handler = async (event) => {
         apiName: f.apiName || f.fieldName,
         displayName: f.displayName || f.label,
         dataType: f.dataType,
-        required: !!f.required
+        required: !!f.required,
+        visible: f.visible !== false
       }));
     });
 
