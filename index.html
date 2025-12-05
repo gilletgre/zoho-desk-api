@@ -1248,6 +1248,32 @@
       return '';
     }
 
+    function extractHistoryNotes() {
+      const hist = Array.isArray(lastHistory) ? lastHistory : [];
+      const notes = [];
+      hist.forEach(ev => {
+        const when = ev.eventTime || '';
+        const info = Array.isArray(ev.eventInfo) ? ev.eventInfo : [];
+        info.forEach(p => {
+          const name = (p.propertyName || '').toLowerCase();
+          if (name === 'content' || name === 'subject') {
+            const pv = p.propertyValue;
+            let raw = '';
+            if (typeof pv === 'string') raw = pv;
+            else if (pv && typeof pv.updatedValue === 'string') raw = pv.updatedValue;
+            else if (pv && typeof pv.previousValue === 'string') raw = pv.previousValue;
+            if (raw) {
+              notes.push({ when, text: stripHtml(raw) || raw });
+            }
+          }
+        });
+        if (ev.summary) {
+          notes.push({ when, text: stripHtml(ev.summary) || ev.summary });
+        }
+      });
+      return notes;
+    }
+
     function pickInitialContent() {
       if (lastDetails && lastDetails.description) {
         return { content: lastDetails.description, source: 'Description (ticket)' };
@@ -1310,8 +1336,23 @@
     function updateResolutionDisplay() {
       const resEl = document.getElementById('resolutionBody');
       if (!resEl) return;
+      // Priorité : résolution fournie par l'API
+      if (lastDetails && lastDetails.resolution && lastDetails.resolution !== '(Aucune résolution encodée)') {
+        resEl.textContent = lastDetails.resolution;
+        return;
+      }
+      const notes = extractHistoryNotes();
+      if (notes.length > 0) {
+        resEl.innerHTML = notes
+          .map(n => {
+            const date = n.when ? new Date(n.when).toLocaleString() : '';
+            return `<div>${date ? date + ' - ' : ''}${n.text}</div>`;
+          })
+          .join('');
+        return;
+      }
       const histContent = pickHistoryContent();
-      if (histContent && (!lastDetails || !lastDetails.resolution)) {
+      if (histContent) {
         resEl.textContent = stripHtml(histContent) || histContent;
       }
     }
