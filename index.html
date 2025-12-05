@@ -1053,6 +1053,7 @@
         renderDebug();
 
         loadHistory(ticketId);
+        updateResolutionDisplay();
         // Précharge les champs du layout pour aider à mapper les cf
         if (data && data.layoutId) {
           loadLayoutFields(data.layoutId);
@@ -1104,6 +1105,7 @@
         lastHistory = events;
         renderDebug();
         renderInitialContent();
+        updateResolutionDisplay();
       } catch (e) {
         console.error(e);
         historyList.innerHTML = '<li>Erreur lors du chargement de l\'historique.</li>';
