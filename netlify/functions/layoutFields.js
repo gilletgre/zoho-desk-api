@@ -99,7 +99,8 @@ exports.handler = async (event) => {
     }
 
     const token = await getAccessToken();
-    const url = `${DESK_BASE}/layouts/${layoutId}/fields?module=tickets`;
+    // L'API ne supporte pas /fields, il faut récupérer le layout complet puis extraire les sections/champs.
+    const url = `${DESK_BASE}/layouts/${layoutId}?module=tickets`;
 
     const res = await fetch(url, {
       headers: {
@@ -118,9 +119,22 @@ exports.handler = async (event) => {
       };
     }
 
+    // On extrait les champs pour les mettre en regard de cf.*
+    const sections = Array.isArray(data.sections) ? data.sections : [];
+    const fields = sections.flatMap(sec => {
+      const fs = Array.isArray(sec.fields) ? sec.fields : [];
+      return fs.map(f => ({
+        section: sec.name || sec.label || '',
+        apiName: f.apiName || f.fieldName,
+        displayName: f.displayName || f.label,
+        dataType: f.dataType,
+        required: !!f.required
+      }));
+    });
+
     return {
       statusCode: 200,
-      body: JSON.stringify(data),
+      body: JSON.stringify({ layout: data, fields }),
       headers: { "Access-Control-Allow-Origin": "*" }
     };
   } catch (e) {

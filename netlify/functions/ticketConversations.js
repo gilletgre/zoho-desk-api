@@ -100,7 +100,8 @@ exports.handler = async (event) => {
     }
 
     const token = await getAccessToken();
-    const url = `${DESK_BASE}/tickets/${ticketId}/conversations`;
+    // include=all pour tenter de récupérer le contenu complet des messages
+    const url = `${DESK_BASE}/tickets/${ticketId}/conversations?include=all`;
 
     const res = await fetch(url, {
       headers: {
