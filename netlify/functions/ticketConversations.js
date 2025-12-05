@@ -142,7 +142,8 @@ exports.handler = async (event) => {
       const conv = list[i];
       if (!conv || !conv.id) continue;
       try {
-        const detailUrl = `${DESK_BASE}/tickets/${ticketId}/conversations/${conv.id}?include=all`;
+        // Selon la doc Zoho, le détail se récupère via /conversations/{id}
+        const detailUrl = `${DESK_BASE}/conversations/${conv.id}?include=all`;
         const detailRes = await fetch(detailUrl, {
           headers: {
             Authorization: `Zoho-oauthtoken ${token}`,

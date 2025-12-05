@@ -100,8 +100,9 @@ exports.handler = async (event) => {
 
     const token = await getAccessToken();
     // Récupère le layout complet puis extrait sections/champs.
-    // NB: ne pas passer ?module=... (Zoho retourne UNPROCESSABLE_ENTITY)
-    const url = `${DESK_BASE}/layouts/${layoutId}`;
+    // On tente d'abord avec include=fields (documenté), puis fallback sans include.
+    const urlWithFields = `${DESK_BASE}/layouts/${layoutId}?include=fields`;
+    const urlFallback = `${DESK_BASE}/layouts/${layoutId}`;
 
     const res = await fetch(url, {
       headers: {
@@ -110,14 +111,37 @@ exports.handler = async (event) => {
       }
     });
 
-    const data = await res.json();
-    if (!res.ok) {
-      console.error("Erreur Zoho Desk (layoutFields):", { status: res.status, data });
-      return {
-        statusCode: res.status,
-        body: JSON.stringify({ error: "Erreur Zoho Desk", status: res.status, details: data }),
-        headers: { "Access-Control-Allow-Origin": "*" }
-      };
+    let data;
+    try {
+      data = await res.json();
+    } catch (parseErr) {
+      console.error("Erreur parse JSON Zoho Desk (layoutFields include=fields):", parseErr);
+      data = null;
+    }
+
+    // Fallback si erreur ou parse ko
+    if (!res.ok || !data) {
+      console.warn("Retry layoutFields without include");
+      const res2 = await fetch(urlFallback, {
+        headers: {
+          Authorization: `Zoho-oauthtoken ${token}`,
+          orgId: ZOHO_ORG_ID
+        }
+      });
+      try {
+        data = await res2.json();
+      } catch (parseErr) {
+        console.error("Erreur parse JSON Zoho Desk (layoutFields fallback):", parseErr);
+        data = null;
+      }
+      if (!res2.ok || !data) {
+        console.error("Erreur Zoho Desk (layoutFields):", { status: res2.status, data });
+        return {
+          statusCode: res2.status || 500,
+          body: JSON.stringify({ error: "Erreur Zoho Desk", status: res2.status, details: data }),
+          headers: { "Access-Control-Allow-Origin": "*" }
+        };
+      }
     }
 
     // On extrait les champs pour les mettre en regard de cf.*
