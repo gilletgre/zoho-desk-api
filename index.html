@@ -768,6 +768,7 @@
     const authPassword = document.getElementById('authPassword');
     const authSubmit = document.getElementById('authSubmit');
     const authError = document.getElementById('authError');
+    const DEBUG_ENABLED = false;
     let ticketsCache = [];
     let lastDetails = null;
     let lastHistory = null;
@@ -1409,13 +1410,11 @@
       }
     });
 
-    checkSession().then(ok => {
-      if (ok) {
-        loadTickets();
-      }
-    });
-  </script>
+checkSession().then(ok => {
+  if (ok) {
+    loadTickets();
+  }
+});
+</script>
 </body>
 </html>
-    let lastLayoutFields = null;
-    const DEBUG_ENABLED = false;
