@@ -15,6 +15,7 @@ const DESK_BASE = `https://desk.zoho.${ZOHO_DC}/api/v1`;
 
 let cachedAccessToken = null;
 let accessTokenExpiry = 0;
+let tokenPromise = null; // Evite d'appeler plusieurs fois le refresh en parallèle
 
 function parseCookies(header = '') {
   return header.split(';').reduce((acc, part) => {
@@ -73,32 +74,49 @@ async function parseZohoResponse(res, context) {
   }
 }
 
-async function getAccessToken() {
+async function getAccessToken(forceRefresh = false) {
   const now = Date.now();
-  if (cachedAccessToken && now < accessTokenExpiry - 60000) {
+  if (!forceRefresh && cachedAccessToken && now < accessTokenExpiry - 60000) {
     return cachedAccessToken;
   }
 
-  const res = await fetch(`${ACCOUNTS_BASE}/oauth/v2/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      refresh_token: ZOHO_REFRESH_TOKEN,
-      client_id: ZOHO_CLIENT_ID,
-      client_secret: ZOHO_CLIENT_SECRET,
-      grant_type: "refresh_token"
-    })
-  });
-
-  const data = await res.json();
-  if (!res.ok) {
-    console.error("Erreur OAuth (addTicketResolution):", data);
-    throw new Error("Erreur OAuth Zoho");
+  if (tokenPromise) {
+    return tokenPromise;
   }
 
-  cachedAccessToken = data.access_token;
-  accessTokenExpiry = now + (data.expires_in || 3600) * 1000;
-  return cachedAccessToken;
+  tokenPromise = (async () => {
+    const res = await fetch(`${ACCOUNTS_BASE}/oauth/v2/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        refresh_token: ZOHO_REFRESH_TOKEN,
+        client_id: ZOHO_CLIENT_ID,
+        client_secret: ZOHO_CLIENT_SECRET,
+        grant_type: "refresh_token"
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      console.error("Erreur OAuth (addTicketResolution):", data);
+      const err = new Error("Erreur OAuth Zoho");
+      // Cas de rate limit : on remonte une erreur explicite 429
+      if (data && data.error === 'Access Denied' && /too many requests/i.test(data.error_description || '')) {
+        err.rateLimited = true;
+      }
+      throw err;
+    }
+
+    cachedAccessToken = data.access_token;
+    accessTokenExpiry = now + (data.expires_in || 3600) * 1000;
+    return cachedAccessToken;
+  })();
+
+  try {
+    return await tokenPromise;
+  } finally {
+    tokenPromise = null;
+  }
 }
 
 exports.handler = async (event) => {
@@ -244,7 +262,7 @@ exports.handler = async (event) => {
       console.error("Token Zoho expiré, tentative de rafraîchissement...");
       cachedAccessToken = null;
       accessTokenExpiry = 0;
-      const newToken = await getAccessToken();
+      const newToken = await getAccessToken(true);
 
       console.log("Nouveau token obtenu, réessai de la mise à jour...");
       const retryResult = await sendResolutionUpdate(newToken, "(réessai)");
@@ -289,9 +307,13 @@ exports.handler = async (event) => {
 
   } catch (e) {
     console.error(e);
+    const statusCode = e.rateLimited ? 429 : 500;
+    const errorMessage = e.rateLimited
+      ? "Limite de requêtes Zoho atteinte, réessayez dans quelques instants."
+      : e.message;
     return {
-      statusCode: 500,
-      body: JSON.stringify({ error: e.message }),
+      statusCode,
+      body: JSON.stringify({ error: errorMessage }),
       headers: {
         "Access-Control-Allow-Origin": "https://zohodeskclabots.netlify.app",
         "Access-Control-Allow-Credentials": "true"
