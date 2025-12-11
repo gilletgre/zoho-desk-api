@@ -187,10 +187,21 @@ exports.handler = async (event) => {
       : (ticketData.resolution && ticketData.resolution.content) || '';
 
     // Construire la nouvelle résolution en ajoutant le nouveau feedback
-    const timestamp = new Date().toISOString();
+    const now = new Date();
+    const formattedTimestamp = now.toLocaleString('fr-FR', {
+      timeZone: 'Europe/Brussels',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
+    const feedbackBlock = `[Feedback client - ${formattedTimestamp}] ${resolutionContent}`.trim();
     const newResolution = currentResolution
-      ? `${currentResolution}\n\n[Feedback client - ${timestamp}]\n${resolutionContent}`
-      : `[Feedback client - ${timestamp}]\n${resolutionContent}`;
+      ? `${currentResolution}\n\n${feedbackBlock}`
+      : feedbackBlock;
 
     const resolutionEndpoint = `${DESK_BASE}/tickets/${ticketId}/resolution`;
     const ticketUpdateEndpoint = `${DESK_BASE}/tickets/${ticketId}`;
