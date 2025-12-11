@@ -100,29 +100,15 @@ exports.handler = async (event) => {
     }
 
     const token = await getAccessToken();
-    // include=all pour tenter d'obtenir le corps complet des threads
-    let url = `${DESK_BASE}/tickets/${ticketId}/threads?include=all`;
+    const url = `${DESK_BASE}/tickets/${ticketId}/threads`;
 
-    let res = await fetch(url, {
+    const res = await fetch(url, {
       headers: {
         Authorization: `Zoho-oauthtoken ${token}`,
         orgId: ZOHO_ORG_ID
       }
     });
-
     let data = await res.json();
-    // Fallback sans include si erreur 4xx
-    if (!res.ok && res.status >= 400 && res.status < 500) {
-      console.warn("Include=all rejected (threads), retrying without include", { status: res.status, data });
-      url = `${DESK_BASE}/tickets/${ticketId}/threads`;
-      res = await fetch(url, {
-        headers: {
-          Authorization: `Zoho-oauthtoken ${token}`,
-          orgId: ZOHO_ORG_ID
-        }
-      });
-      data = await res.json();
-    }
 
     if (!res.ok) {
       console.error("Erreur Zoho Desk (threads):", { status: res.status, data });
