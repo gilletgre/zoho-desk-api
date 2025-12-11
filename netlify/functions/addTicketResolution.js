@@ -58,6 +58,21 @@ function unauthorized() {
   };
 }
 
+async function parseZohoResponse(res, context) {
+  const responseText = await res.text();
+  if (!responseText) {
+    console.warn(`Réponse vide de l'API Zoho Desk${context ? ` (${context})` : ''}`);
+    return { data: null, raw: '' };
+  }
+
+  try {
+    return { data: JSON.parse(responseText), raw: responseText };
+  } catch (parseError) {
+    console.error(`Erreur de parsing JSON${context ? ` (${context})` : ''}:`, parseError, "Réponse brute:", responseText);
+    throw new Error(`Réponse invalide de l'API Zoho Desk${context ? ` (${context})` : ''}`);
+  }
+}
+
 async function getAccessToken() {
   const now = Date.now();
   if (cachedAccessToken && now < accessTokenExpiry - 60000) {
@@ -170,25 +185,9 @@ exports.handler = async (event) => {
       })
     });
 
-    let responseData;
-    try {
-      // Vérifier si la réponse contient du contenu avant de parser le JSON
-      const responseText = await updateRes.text();
-      if (!responseText) {
-        console.warn("Réponse vide de l'API Zoho Desk");
-        responseData = { success: true, message: "Mise à jour réussie (réponse vide)" };
-      } else {
-        try {
-          responseData = JSON.parse(responseText);
-        } catch (parseError) {
-          console.error("Erreur de parsing JSON:", parseError, "Réponse brute:", responseText);
-          throw new Error("Réponse invalide de l'API Zoho Desk: " + responseText.substring(0, 100));
-        }
-      }
-    } catch (error) {
-      console.error("Erreur lors de la récupération de la réponse:", error);
-      throw new Error("Erreur lors de la communication avec l'API Zoho Desk");
-    }
+    const { data: parsedUpdateData, raw: rawUpdateBody } =
+      await parseZohoResponse(updateRes, "mise à jour de la résolution");
+    let responseData = parsedUpdateData;
 
     if (!updateRes.ok) {
       // Si c'est une erreur 401 de Zoho, le token a probablement expiré
@@ -213,42 +212,34 @@ exports.handler = async (event) => {
           })
         });
 
-        // Gérer la réponse de la nouvelle tentative
-        let retryResponseData;
-        try {
-          const retryResponseText = await retryRes.text();
-          if (!retryResponseText) {
-            console.warn("Réponse vide de l'API Zoho Desk (réessai)");
-            retryResponseData = { success: true, message: "Mise à jour réussie après rafraîchissement du token" };
-          } else {
-            try {
-              retryResponseData = JSON.parse(retryResponseText);
-            } catch (parseError) {
-              console.error("Erreur de parsing JSON (réessai):", parseError);
-              throw new Error("Réponse invalide de l'API Zoho Desk après rafraîchissement du token");
-            }
-          }
-        } catch (error) {
-          console.error("Erreur lors de la récupération de la réponse (réessai):", error);
-          throw new Error("Erreur lors de la communication avec l'API Zoho Desk après rafraîchissement du token");
-        }
+        const { data: parsedRetryData, raw: rawRetryBody } =
+          await parseZohoResponse(retryRes, "mise à jour de la résolution (réessai)");
 
         if (!retryRes.ok) {
-          const errorMessage = retryResponseData && retryResponseData.message ? retryResponseData.message :
-                             "Erreur inconnue de l'API Zoho Desk après rafraîchissement";
-          console.error("Échec après rafraîchissement du token:", { status: retryRes.status, response: retryResponseData });
+          const errorMessage = parsedRetryData && parsedRetryData.message
+            ? parsedRetryData.message
+            : "Erreur inconnue de l'API Zoho Desk après rafraîchissement";
+          console.error("Échec après rafraîchissement du token:", {
+            status: retryRes.status,
+            response: parsedRetryData || rawRetryBody
+          });
           throw new Error(`Impossible de mettre à jour la résolution après rafraîchissement: ${errorMessage} (code: ${retryRes.status})`);
         }
 
         // Si la réessai réussit, utiliser ces données
-        responseData = retryResponseData;
+        responseData = parsedRetryData || { success: true, message: "Mise à jour réussie après rafraîchissement du token (réponse vide)" };
         console.log("Succès après rafraîchissement du token Zoho");
       } else {
-        const errorMessage = responseData && responseData.message ? responseData.message :
+        const errorMessage = parsedUpdateData && parsedUpdateData.message ? parsedUpdateData.message :
                            "Erreur inconnue de l'API Zoho Desk";
-        console.error("Erreur lors de la mise à jour de la résolution:", { status: updateRes.status, response: responseData });
+        console.error("Erreur lors de la mise à jour de la résolution:", {
+          status: updateRes.status,
+          response: parsedUpdateData || rawUpdateBody
+        });
         throw new Error(`Impossible de mettre à jour la résolution du ticket: ${errorMessage} (code: ${updateRes.status})`);
       }
+    } else {
+      responseData = parsedUpdateData || { success: true, message: "Mise à jour réussie (réponse vide)" };
     }
 
     return {
