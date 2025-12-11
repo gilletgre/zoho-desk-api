@@ -194,7 +194,7 @@ exports.handler = async (event) => {
 
     const resolutionEndpoint = `${DESK_BASE}/tickets/${ticketId}/resolution`;
     const ticketUpdateEndpoint = `${DESK_BASE}/tickets/${ticketId}`;
-    const threadEndpoint = `${DESK_BASE}/tickets/${ticketId}/threads`;
+    const commentEndpoint = `${DESK_BASE}/tickets/${ticketId}/comments`;
 
     async function sendResolutionUpdate(oauthToken, contextSuffix = '') {
       // On tente plusieurs formes de payload pour s'adapter aux variations de l'API Desk
@@ -237,8 +237,8 @@ exports.handler = async (event) => {
       return { res: lastRes, parsed: lastParsed, source: lastSource };
     }
 
-    async function createThread(oauthToken, contextSuffix = '') {
-      const res = await fetch(threadEndpoint, {
+    async function createComment(oauthToken, contextSuffix = '') {
+      const res = await fetch(commentEndpoint, {
         method: 'POST',
         headers: {
           Authorization: `Zoho-oauthtoken ${oauthToken}`,
@@ -248,12 +248,11 @@ exports.handler = async (event) => {
         },
         body: JSON.stringify({
           isPublic: false,
-          channel: 'Web',
           content: `[Feedback client - ${timestamp}]\n${resolutionContent}`
         })
       });
 
-      const parsed = await parseZohoResponse(res, `création de thread (fallback commentaire${contextSuffix ? ` ${contextSuffix}` : ''})`);
+      const parsed = await parseZohoResponse(res, `création de commentaire (fallback${contextSuffix ? ` ${contextSuffix}` : ''})`);
       return { res, parsed };
     }
 
@@ -277,17 +276,17 @@ exports.handler = async (event) => {
     }
 
     if (!updateRes.ok) {
-      console.warn(`Mise à jour résolution échouée (${updateRes.status}), tentative de création de commentaire (thread)`);
-      const threadResult = await createThread(activeToken, "(fallback)");
-      if (threadResult.res.ok) {
-        console.log("Commentaire créé via /threads (fallback)");
+      console.warn(`Mise à jour résolution échouée (${updateRes.status}), tentative de création de commentaire`);
+      const commentResult = await createComment(activeToken, "(fallback)");
+      if (commentResult.res.ok) {
+        console.log("Commentaire créé via /comments (fallback)");
         return {
           statusCode: 200,
           body: JSON.stringify({
             success: true,
-            message: 'Feedback ajouté comme commentaire (fallback thread) car la mise à jour de la résolution a été refusée',
+            message: 'Feedback ajouté comme commentaire (fallback) car la mise à jour de la résolution a été refusée',
             ticketId: ticketId,
-            response: threadResult.parsed.data || threadResult.parsed.raw
+            response: commentResult.parsed.data || commentResult.parsed.raw
           }),
           headers: {
             "Access-Control-Allow-Origin": "https://zohodeskclabots.netlify.app",
@@ -304,8 +303,8 @@ exports.handler = async (event) => {
         status: updateRes.status,
         source: updateSource,
         response: parsedUpdateData && (parsedUpdateData.data || parsedUpdateData.raw),
-        threadFallbackStatus: threadResult && threadResult.res && threadResult.res.status,
-        threadFallbackResponse: threadResult && threadResult.parsed && (threadResult.parsed.data || threadResult.parsed.raw)
+        commentFallbackStatus: commentResult && commentResult.res && commentResult.res.status,
+        commentFallbackResponse: commentResult && commentResult.parsed && (commentResult.parsed.data || commentResult.parsed.raw)
       });
       throw new Error(`Impossible de mettre à jour la résolution du ticket: ${errorMessage} (code: ${updateRes.status})`);
     }
