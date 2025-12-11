@@ -198,24 +198,9 @@ exports.handler = async (event) => {
     async function sendResolutionUpdate(oauthToken, contextSuffix = '') {
       // On tente plusieurs formes de payload pour s'adapter aux variations de l'API Desk
       const attempts = [
-        {
-          source: 'resolution-endpoint',
-          url: resolutionEndpoint,
-          body: { content: newResolution },
-          fallbackStatuses: [400, 404, 405, 415]
-        },
-        {
-          source: 'ticket-fallback-object',
-          url: ticketUpdateEndpoint,
-          body: { resolution: { content: newResolution } },
-          fallbackStatuses: [400, 415]
-        },
-        {
-          source: 'ticket-fallback-string',
-          url: ticketUpdateEndpoint,
-          body: { resolution: newResolution },
-          fallbackStatuses: []
-        }
+        { source: 'resolution-endpoint', url: resolutionEndpoint, body: { content: newResolution } },
+        { source: 'ticket-fallback-object', url: ticketUpdateEndpoint, body: { resolution: { content: newResolution } } },
+        { source: 'ticket-fallback-string', url: ticketUpdateEndpoint, body: { resolution: newResolution } }
       ];
 
       let lastRes = null;
@@ -244,11 +229,7 @@ exports.handler = async (event) => {
         lastParsed = parsed;
         lastSource = attempt.source;
 
-        const canTryNext = attempt.fallbackStatuses.includes(res.status);
-        if (!canTryNext) {
-          break;
-        }
-
+        // Log et tenter la forme suivante
         console.warn(`${attempt.source} (${res.status}) ; tentative avec une autre forme de payload...`);
       }
 
