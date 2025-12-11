@@ -15,6 +15,7 @@ const DESK_BASE = `https://desk.zoho.${ZOHO_DC}/api/v1`;
 
 let cachedAccessToken = null;
 let accessTokenExpiry = 0;
+let tokenPromise = null;
 
 function parseCookies(header = '') {
   return header.split(';').reduce((acc, part) => {
@@ -55,32 +56,48 @@ function unauthorized() {
   };
 }
 
-async function getAccessToken() {
+async function getAccessToken(forceRefresh = false) {
   const now = Date.now();
-  if (cachedAccessToken && now < accessTokenExpiry - 60000) {
+  if (!forceRefresh && cachedAccessToken && now < accessTokenExpiry - 60000) {
     return cachedAccessToken;
   }
 
-  const res = await fetch(`${ACCOUNTS_BASE}/oauth/v2/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      refresh_token: ZOHO_REFRESH_TOKEN,
-      client_id: ZOHO_CLIENT_ID,
-      client_secret: ZOHO_CLIENT_SECRET,
-      grant_type: "refresh_token"
-    })
-  });
-
-  const data = await res.json();
-  if (!res.ok) {
-    console.error("Erreur OAuth (ticketMessages):", data);
-    throw new Error("Erreur OAuth Zoho");
+  if (tokenPromise) {
+    return tokenPromise;
   }
 
-  cachedAccessToken = data.access_token;
-  accessTokenExpiry = now + (data.expires_in || 3600) * 1000;
-  return cachedAccessToken;
+  tokenPromise = (async () => {
+    const res = await fetch(`${ACCOUNTS_BASE}/oauth/v2/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        refresh_token: ZOHO_REFRESH_TOKEN,
+        client_id: ZOHO_CLIENT_ID,
+        client_secret: ZOHO_CLIENT_SECRET,
+        grant_type: "refresh_token"
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      console.error("Erreur OAuth (ticketMessages):", data);
+      const err = new Error("Erreur OAuth Zoho");
+      if (data && data.error === 'Access Denied' && /too many requests/i.test(data.error_description || '')) {
+        err.rateLimited = true;
+      }
+      throw err;
+    }
+
+    cachedAccessToken = data.access_token;
+    accessTokenExpiry = now + (data.expires_in || 3600) * 1000;
+    return cachedAccessToken;
+  })();
+
+  try {
+    return await tokenPromise;
+  } finally {
+    tokenPromise = null;
+  }
 }
 
 exports.handler = async (event) => {
@@ -148,9 +165,13 @@ exports.handler = async (event) => {
     };
   } catch (e) {
     console.error(e);
+    const statusCode = e.rateLimited ? 429 : 500;
+    const message = e.rateLimited
+      ? "Limite de requêtes Zoho atteinte, réessayez dans quelques instants."
+      : e.message;
     return {
-      statusCode: 500,
-      body: JSON.stringify({ error: e.message }),
+      statusCode,
+      body: JSON.stringify({ error: message }),
       headers: { "Access-Control-Allow-Origin": "*" }
     };
   }
