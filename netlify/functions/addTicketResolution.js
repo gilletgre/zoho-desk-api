@@ -194,6 +194,7 @@ exports.handler = async (event) => {
 
     const resolutionEndpoint = `${DESK_BASE}/tickets/${ticketId}/resolution`;
     const ticketUpdateEndpoint = `${DESK_BASE}/tickets/${ticketId}`;
+    const threadEndpoint = `${DESK_BASE}/tickets/${ticketId}/threads`;
 
     async function sendResolutionUpdate(oauthToken, contextSuffix = '') {
       // On tente plusieurs formes de payload pour s'adapter aux variations de l'API Desk
@@ -236,7 +237,28 @@ exports.handler = async (event) => {
       return { res: lastRes, parsed: lastParsed, source: lastSource };
     }
 
-    let { res: updateRes, parsed: parsedUpdateData, source: updateSource } = await sendResolutionUpdate(token);
+    async function createThread(oauthToken, contextSuffix = '') {
+      const res = await fetch(threadEndpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Zoho-oauthtoken ${oauthToken}`,
+          orgId: ZOHO_ORG_ID,
+          Accept: 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          isPublic: false,
+          channel: 'Web',
+          content: `[Feedback client - ${timestamp}]\n${resolutionContent}`
+        })
+      });
+
+      const parsed = await parseZohoResponse(res, `création de thread (fallback commentaire${contextSuffix ? ` ${contextSuffix}` : ''})`);
+      return { res, parsed };
+    }
+
+    let activeToken = token;
+    let { res: updateRes, parsed: parsedUpdateData, source: updateSource } = await sendResolutionUpdate(activeToken);
     let responseData = parsedUpdateData.data;
 
     if (!updateRes.ok && updateRes.status === 401) {
@@ -244,6 +266,7 @@ exports.handler = async (event) => {
       cachedAccessToken = null;
       accessTokenExpiry = 0;
       const newToken = await getAccessToken(true);
+      activeToken = newToken;
 
       console.log("Nouveau token obtenu, réessai de la mise à jour...");
       const retryResult = await sendResolutionUpdate(newToken, "(réessai)");
@@ -254,6 +277,25 @@ exports.handler = async (event) => {
     }
 
     if (!updateRes.ok) {
+      console.warn(`Mise à jour résolution échouée (${updateRes.status}), tentative de création de commentaire (thread)`);
+      const threadResult = await createThread(activeToken, "(fallback)");
+      if (threadResult.res.ok) {
+        console.log("Commentaire créé via /threads (fallback)");
+        return {
+          statusCode: 200,
+          body: JSON.stringify({
+            success: true,
+            message: 'Feedback ajouté comme commentaire (fallback thread) car la mise à jour de la résolution a été refusée',
+            ticketId: ticketId,
+            response: threadResult.parsed.data || threadResult.parsed.raw
+          }),
+          headers: {
+            "Access-Control-Allow-Origin": "https://zohodeskclabots.netlify.app",
+            "Access-Control-Allow-Credentials": "true"
+          }
+        };
+      }
+
       const errorMessage = (parsedUpdateData && parsedUpdateData.data && parsedUpdateData.data.message) ||
         (parsedUpdateData && parsedUpdateData.data && parsedUpdateData.data.error) ||
         (parsedUpdateData && parsedUpdateData.raw) ||
@@ -261,7 +303,9 @@ exports.handler = async (event) => {
       console.error("Erreur lors de la mise à jour de la résolution:", {
         status: updateRes.status,
         source: updateSource,
-        response: parsedUpdateData && (parsedUpdateData.data || parsedUpdateData.raw)
+        response: parsedUpdateData && (parsedUpdateData.data || parsedUpdateData.raw),
+        threadFallbackStatus: threadResult && threadResult.res && threadResult.res.status,
+        threadFallbackResponse: threadResult && threadResult.parsed && (threadResult.parsed.data || threadResult.parsed.raw)
       });
       throw new Error(`Impossible de mettre à jour la résolution du ticket: ${errorMessage} (code: ${updateRes.status})`);
     }
