@@ -1045,8 +1045,23 @@
           </div>
 
           <div class="callout">
-            <div class="callout-label">Description</div>
-            <div class="callout-body">${description}</div>
+            <div class="callout-label">Feedback client</div>
+            <div class="callout-body" id="feedbackBody">${description}</div>
+            <button id="showFeedbackBtn" class="auth-button" style="margin-top: 10px; width: 100%; padding: 8px 12px; font-size: 14px;">Ajouter un feedback</button>
+            <button id="showImageUploadBtn" class="auth-button" style="margin-top: 10px; width: 100%; padding: 8px 12px; font-size: 14px;">Ajouter une image</button>
+          </div>
+
+          <div class="callout" id="newFeedbackSection" style="display: none;">
+            <div class="callout-label">Nouveau feedback</div>
+            <textarea id="newFeedbackText" class="auth-input" style="width: 100%; min-height: 100px; margin-bottom: 10px;" placeholder="Ajoutez votre feedback ici..."></textarea>
+            <button id="addFeedbackBtn" class="auth-button" style="width: 100%;">Ajouter feedback avec date/heure</button>
+          </div>
+
+          <div class="callout" id="imageUploadSection" style="display: none;">
+            <div class="callout-label">Upload d'image</div>
+            <input type="file" id="imageUploadInput" accept="image/*" style="margin-bottom: 10px; width: 100%;">
+            <div id="imagePreview" style="margin: 10px 0; max-width: 200px; max-height: 200px; overflow: hidden;"></div>
+            <button id="uploadImageBtn" class="auth-button" style="width: 100%;">Uploader l'image</button>
           </div>
         `;
         lastDetails = data;
@@ -1410,6 +1425,230 @@
       if (e.key === 'Enter') {
         login();
       }
+    });
+
+    // Gestion du feedback client
+    function showFeedbackSection() {
+      const feedbackSection = document.getElementById('newFeedbackSection');
+      if (feedbackSection) {
+        feedbackSection.style.display = 'block';
+      }
+    }
+
+    async function addFeedbackWithTimestamp() {
+      const feedbackText = document.getElementById('newFeedbackText');
+      const feedbackBody = document.getElementById('feedbackBody');
+      const addFeedbackBtn = document.getElementById('addFeedbackBtn');
+
+      if (!feedbackText || !feedbackBody || !addFeedbackBtn) return;
+
+      const text = feedbackText.value.trim();
+      if (!text) {
+        alert('Veuillez entrer un feedback');
+        return;
+      }
+
+      addFeedbackBtn.disabled = true;
+      addFeedbackBtn.textContent = 'Ajout en cours...';
+
+      try {
+        // Ajouter date et heure automatique
+        const now = new Date();
+        const timestamp = now.toLocaleString('fr-FR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        });
+
+        const feedbackWithTimestamp = `[${timestamp}] ${text}`;
+
+        // Mettre à jour l'interface immédiatement
+        const currentContent = feedbackBody.textContent || '';
+        feedbackBody.textContent = currentContent ? `${currentContent}\n\n${feedbackWithTimestamp}` : feedbackWithTimestamp;
+
+        // Effacer le champ de texte
+        feedbackText.value = '';
+
+        // Envoyer à Zoho Desk via l'API
+        if (lastDetails && lastDetails.id) {
+          const result = await sendFeedbackToZohoDesk(lastDetails.id, feedbackWithTimestamp);
+          console.log('Feedback API response:', result);
+          alert('✅ Feedback ajouté avec succès et envoyé à Zoho Desk!');
+        } else {
+          alert('⚠️ Feedback ajouté localement mais impossible d\'envoyer à Zoho Desk (ID de ticket manquant)');
+        }
+
+      } catch (e) {
+        console.error('Erreur lors de l\'ajout du feedback:', e);
+        // Feedback plus détaillé pour l'utilisateur
+        let errorMessage = 'Erreur lors de l\'ajout du feedback: ' + (e.message || 'Erreur inconnue');
+
+        // Si c'est une erreur de réseau ou d'authentification, donner des conseils spécifiques
+        if (e.message.includes('connexion') || e.message.includes('réseau')) {
+          errorMessage += '\nVeuillez vérifier votre connexion internet.';
+        } else if (e.message.includes('session') || e.message.includes('authentification')) {
+          errorMessage += '\nVotre session a peut-être expiré. Veuillez vous reconnecter.';
+        }
+
+        alert(errorMessage);
+
+        // Revertir les changements locaux si l'envoi API a échoué
+        // Mais garder le feedback visible pour que l'utilisateur puisse le recopier si besoin
+        feedbackBody.textContent = currentContent ? `${currentContent}\n\n[ÉCHEC ENVOI API] ${feedbackWithTimestamp}` : `[ÉCHEC ENVOI API] ${feedbackWithTimestamp}`;
+      } finally {
+        addFeedbackBtn.disabled = false;
+        addFeedbackBtn.textContent = 'Ajouter feedback avec date/heure';
+      }
+    }
+
+    async function sendFeedbackToZohoDesk(ticketId, feedbackText) {
+      try {
+        const res = await fetch('/.netlify/functions/addTicketResolution', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            ticketId: ticketId,
+            resolutionContent: feedbackText
+          }),
+          credentials: 'include'
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || 'Erreur lors de l\'envoi du feedback à Zoho Desk');
+        }
+
+        console.log('Feedback envoyé avec succès à Zoho Desk:', data);
+        return data;
+
+      } catch (e) {
+        console.error('Erreur lors de l\'envoi du feedback à Zoho Desk:', e);
+        // Ajouter plus de détails sur l'erreur pour le débogage
+        if (e.message.includes('Failed to fetch')) {
+          throw new Error('Impossible de contacter le serveur. Vérifiez votre connexion.');
+        } else if (e.message.includes('401')) {
+          throw new Error('Session expirée. Veuillez vous reconnecter.');
+        } else {
+          throw new Error('Erreur lors de l\'envoi: ' + e.message);
+        }
+      }
+    }
+
+    // Gestion de l'upload d'images
+    function showImageUploadSection() {
+      const imageUploadSection = document.getElementById('imageUploadSection');
+      if (imageUploadSection) {
+        imageUploadSection.style.display = 'block';
+      }
+    }
+
+    function previewImage(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const imagePreview = document.getElementById('imagePreview');
+        if (imagePreview) {
+          imagePreview.innerHTML = `<img src="${e.target.result}" style="max-width: 100%; max-height: 100%;">`;
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+
+    async function uploadImage() {
+      const imageUploadInput = document.getElementById('imageUploadInput');
+      const uploadImageBtn = document.getElementById('uploadImageBtn');
+
+      if (!imageUploadInput || !uploadImageBtn) return;
+
+      const file = imageUploadInput.files[0];
+      if (!file) {
+        alert('Veuillez sélectionner une image');
+        return;
+      }
+
+      uploadImageBtn.disabled = true;
+      uploadImageBtn.textContent = 'Upload en cours...';
+
+      try {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = async function() {
+          const base64Image = reader.result;
+
+          const res = await fetch('/.netlify/functions/uploadImage', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              ticketId: lastDetails.id,
+              imageData: base64Image
+            }),
+            credentials: 'include'
+          });
+
+          const data = await res.json();
+
+          if (!res.ok) {
+            throw new Error(data.error || 'Erreur lors de l\'upload de l\'image');
+          }
+
+          alert('Image uploadée avec succès!');
+          imageUploadInput.value = '';
+          document.getElementById('imagePreview').innerHTML = '';
+        };
+      } catch (e) {
+        console.error('Erreur lors de l\'upload de l\'image:', e);
+        alert('Erreur lors de l\'upload de l\'image: ' + (e.message || ''));
+      } finally {
+        uploadImageBtn.disabled = false;
+        uploadImageBtn.textContent = 'Uploader l\'image';
+      }
+    }
+
+    // Ajouter les écouteurs d'événements pour le feedback
+    // Utiliser la délégation d'événements car les éléments sont créés dynamiquement
+    document.addEventListener('DOMContentLoaded', () => {
+      // Délégation d'événements pour les boutons (fonctionne pour les éléments dynamiques)
+      document.addEventListener('click', function(e) {
+        // Bouton "Ajouter un feedback"
+        if (e.target && e.target.id === 'showFeedbackBtn') {
+          const feedbackSection = document.getElementById('newFeedbackSection');
+          if (feedbackSection) {
+            feedbackSection.style.display = feedbackSection.style.display === 'none' ? 'block' : 'none';
+          }
+        }
+
+        // Bouton "Ajouter une image"
+        if (e.target && e.target.id === 'showImageUploadBtn') {
+          showImageUploadSection();
+        }
+
+        // Bouton "Ajouter feedback avec date/heure"
+        if (e.target && e.target.id === 'addFeedbackBtn') {
+          addFeedbackWithTimestamp();
+        }
+
+        // Bouton "Uploader l'image"
+        if (e.target && e.target.id === 'uploadImageBtn') {
+          uploadImage();
+        }
+      });
+
+      // Écouteur pour le changement de fichier (délégation)
+      document.addEventListener('change', function(e) {
+        if (e.target && e.target.id === 'imageUploadInput') {
+          previewImage(e);
+        }
+      });
     });
 
 checkSession().then(ok => {
