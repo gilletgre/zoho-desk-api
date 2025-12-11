@@ -123,6 +123,16 @@ exports.handler = async (event) => {
     }
 
     if (!res.ok) {
+      // Sur certains tenants, /messages peut renvoyer 404 URL_NOT_FOUND: on renvoie juste une liste vide
+      if (res.status === 404 && data && data.errorCode === 'URL_NOT_FOUND') {
+        console.warn("Messages endpoint indisponible pour ce ticket, retour d'une liste vide");
+        return {
+          statusCode: 200,
+          body: JSON.stringify([]),
+          headers: { "Access-Control-Allow-Origin": "*" }
+        };
+      }
+
       console.error("Erreur Zoho Desk (messages):", { status: res.status, data });
       return {
         statusCode: res.status,
