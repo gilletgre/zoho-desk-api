@@ -975,7 +975,9 @@
         const created = data.createdTime ? new Date(data.createdTime).toLocaleString() : '';
         const closed = data.closedTime ? new Date(data.closedTime).toLocaleString() : '';
         const description = data.description || '(Aucune description disponible)';
-        const resolution = data.resolution || '(Aucune résolution encodée)';
+        const resolution = typeof data.resolution === 'string'
+          ? data.resolution
+          : (data.resolution && data.resolution.content) || '(Aucune résolution encodée)';
         const timeEntries = data.timeEntryCount || '0';
         const attachments = data.attachmentCount || '0';
         const tasks = data.taskCount || '0';
@@ -1385,6 +1387,13 @@
       if (!resEl) return;
       // Priorité : résolution fournie par l'API
       if (lastDetails && lastDetails.resolution && lastDetails.resolution !== '(Aucune résolution encodée)') {
+        const resVal = typeof lastDetails.resolution === 'string'
+          ? lastDetails.resolution
+          : (lastDetails.resolution && lastDetails.resolution.content);
+        if (resVal) {
+          resEl.textContent = resVal;
+          return;
+        }
         resEl.textContent = lastDetails.resolution;
         return;
       }
