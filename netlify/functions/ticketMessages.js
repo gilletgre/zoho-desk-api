@@ -100,15 +100,25 @@ exports.handler = async (event) => {
     }
 
     const token = await getAccessToken();
-    const url = `${DESK_BASE}/tickets/${ticketId}/messages`;
+    const urlWithInclude = `${DESK_BASE}/tickets/${ticketId}/messages?include=all`;
+    const urlFallback = `${DESK_BASE}/tickets/${ticketId}/messages`;
 
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Zoho-oauthtoken ${token}`,
-        orgId: ZOHO_ORG_ID
-      }
-    });
-    let data = await res.json();
+    async function fetchMsgs(url) {
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Zoho-oauthtoken ${token}`,
+          orgId: ZOHO_ORG_ID
+        }
+      });
+      const data = await res.json();
+      return { res, data };
+    }
+
+    let { res, data } = await fetchMsgs(urlWithInclude);
+    if (!res.ok && res.status >= 400 && res.status < 500) {
+      console.warn("Include=all rejected (messages), retrying without include", { status: res.status, data });
+      ({ res, data } = await fetchMsgs(urlFallback));
+    }
 
     if (!res.ok) {
       // Sur certains tenants, /messages peut renvoyer 404 URL_NOT_FOUND: on renvoie juste une liste vide

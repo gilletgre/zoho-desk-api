@@ -100,14 +100,26 @@ exports.handler = async (event) => {
     }
 
     const token = await getAccessToken();
-    const url = `${DESK_BASE}/tickets/${ticketId}`;
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Zoho-oauthtoken ${token}`,
-        orgId: ZOHO_ORG_ID
-      }
-    });
-    const data = await res.json();
+    const include = 'contacts,assignee,team,department,product,collaborators';
+    const urlWithInclude = `${DESK_BASE}/tickets/${ticketId}?include=${encodeURIComponent(include)}`;
+    const urlFallback = `${DESK_BASE}/tickets/${ticketId}`;
+
+    async function fetchTicket(url) {
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Zoho-oauthtoken ${token}`,
+          orgId: ZOHO_ORG_ID
+        }
+      });
+      const data = await res.json();
+      return { res, data };
+    }
+
+    let { res, data } = await fetchTicket(urlWithInclude);
+    if (!res.ok && res.status >= 400 && res.status < 500) {
+      console.warn("Include rejected (details), retrying without include", { status: res.status, data });
+      ({ res, data } = await fetchTicket(urlFallback));
+    }
 
     if (!res.ok) {
       console.error("Erreur Zoho Desk (details):", data);
