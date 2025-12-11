@@ -163,7 +163,10 @@ exports.handler = async (event) => {
     }
 
     const ticketData = await ticketRes.json();
-    const currentResolution = ticketData.resolution || '';
+    // La résolution renvoyée par l'API peut être une chaîne ou un objet { content }
+    const currentResolution = typeof ticketData.resolution === 'string'
+      ? ticketData.resolution
+      : (ticketData.resolution && ticketData.resolution.content) || '';
 
     // Construire la nouvelle résolution en ajoutant le nouveau feedback
     const timestamp = new Date().toISOString();
@@ -171,75 +174,78 @@ exports.handler = async (event) => {
       ? `${currentResolution}\n\n[Feedback client - ${timestamp}]\n${resolutionContent}`
       : `[Feedback client - ${timestamp}]\n${resolutionContent}`;
 
-    // Mettre à jour le ticket avec la nouvelle résolution
-    const updateUrl = `${DESK_BASE}/tickets/${ticketId}`;
-    const updateRes = await fetch(updateUrl, {
-      method: 'PUT',
-      headers: {
-        Authorization: `Zoho-oauthtoken ${token}`,
-        orgId: ZOHO_ORG_ID,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        resolution: newResolution
-      })
-    });
+    const resolutionEndpoint = `${DESK_BASE}/tickets/${ticketId}/resolution`;
+    const ticketUpdateEndpoint = `${DESK_BASE}/tickets/${ticketId}`;
 
-    const { data: parsedUpdateData, raw: rawUpdateBody } =
-      await parseZohoResponse(updateRes, "mise à jour de la résolution");
-    let responseData = parsedUpdateData;
+    async function sendResolutionUpdate(oauthToken, contextSuffix = '') {
+      // Essai prioritaire via l'endpoint dédié à la résolution
+      let res = await fetch(resolutionEndpoint, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Zoho-oauthtoken ${oauthToken}`,
+          orgId: ZOHO_ORG_ID,
+          Accept: 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ content: newResolution })
+      });
 
-    if (!updateRes.ok) {
-      // Si c'est une erreur 401 de Zoho, le token a probablement expiré
-      if (updateRes.status === 401) {
-        console.error("Token Zoho expiré, tentative de rafraîchissement...");
-        // Invalider le cache et obtenir un nouveau token
-        cachedAccessToken = null;
-        accessTokenExpiry = 0;
-        const newToken = await getAccessToken();
+      let parsed = await parseZohoResponse(res, `mise à jour de la résolution${contextSuffix ? ` ${contextSuffix}` : ''}`);
+      let source = 'resolution-endpoint';
 
-        // Réessayer avec le nouveau token
-        console.log("Nouveau token obtenu, réessai de la mise à jour...");
-        const retryRes = await fetch(updateUrl, {
+      // Certains comptes n'autorisent pas /resolution ; fallback sur la mise à jour du ticket
+      if (!res.ok && [400, 404, 405, 415].includes(res.status)) {
+        console.warn(`/tickets/{id}/resolution indisponible (${res.status}), fallback sur PUT /tickets/{id}`);
+        res = await fetch(ticketUpdateEndpoint, {
           method: 'PUT',
           headers: {
-            Authorization: `Zoho-oauthtoken ${newToken}`,
+            Authorization: `Zoho-oauthtoken ${oauthToken}`,
             orgId: ZOHO_ORG_ID,
+            Accept: 'application/json',
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({
-            resolution: newResolution
-          })
+          body: JSON.stringify({ resolution: { content: newResolution } })
         });
-
-        const { data: parsedRetryData, raw: rawRetryBody } =
-          await parseZohoResponse(retryRes, "mise à jour de la résolution (réessai)");
-
-        if (!retryRes.ok) {
-          const errorMessage = parsedRetryData && parsedRetryData.message
-            ? parsedRetryData.message
-            : "Erreur inconnue de l'API Zoho Desk après rafraîchissement";
-          console.error("Échec après rafraîchissement du token:", {
-            status: retryRes.status,
-            response: parsedRetryData || rawRetryBody
-          });
-          throw new Error(`Impossible de mettre à jour la résolution après rafraîchissement: ${errorMessage} (code: ${retryRes.status})`);
-        }
-
-        // Si la réessai réussit, utiliser ces données
-        responseData = parsedRetryData || { success: true, message: "Mise à jour réussie après rafraîchissement du token (réponse vide)" };
-        console.log("Succès après rafraîchissement du token Zoho");
-      } else {
-        const errorMessage = parsedUpdateData && parsedUpdateData.message ? parsedUpdateData.message :
-                           "Erreur inconnue de l'API Zoho Desk";
-        console.error("Erreur lors de la mise à jour de la résolution:", {
-          status: updateRes.status,
-          response: parsedUpdateData || rawUpdateBody
-        });
-        throw new Error(`Impossible de mettre à jour la résolution du ticket: ${errorMessage} (code: ${updateRes.status})`);
+        parsed = await parseZohoResponse(res, `mise à jour du ticket (fallback résolution${contextSuffix ? ` ${contextSuffix}` : ''})`);
+        source = 'ticket-fallback';
       }
-    } else {
-      responseData = parsedUpdateData || { success: true, message: "Mise à jour réussie (réponse vide)" };
+
+      return { res, parsed, source };
+    }
+
+    let { res: updateRes, parsed: parsedUpdateData, source: updateSource } = await sendResolutionUpdate(token);
+    let responseData = parsedUpdateData.data;
+
+    if (!updateRes.ok && updateRes.status === 401) {
+      console.error("Token Zoho expiré, tentative de rafraîchissement...");
+      cachedAccessToken = null;
+      accessTokenExpiry = 0;
+      const newToken = await getAccessToken();
+
+      console.log("Nouveau token obtenu, réessai de la mise à jour...");
+      const retryResult = await sendResolutionUpdate(newToken, "(réessai)");
+      updateRes = retryResult.res;
+      parsedUpdateData = retryResult.parsed;
+      updateSource = retryResult.source;
+      responseData = parsedUpdateData.data;
+    }
+
+    if (!updateRes.ok) {
+      const errorMessage = (parsedUpdateData && parsedUpdateData.data && parsedUpdateData.data.message) ||
+        (parsedUpdateData && parsedUpdateData.data && parsedUpdateData.data.error) ||
+        (parsedUpdateData && parsedUpdateData.raw) ||
+        "Erreur inconnue de l'API Zoho Desk";
+      console.error("Erreur lors de la mise à jour de la résolution:", {
+        status: updateRes.status,
+        source: updateSource,
+        response: parsedUpdateData && (parsedUpdateData.data || parsedUpdateData.raw)
+      });
+      throw new Error(`Impossible de mettre à jour la résolution du ticket: ${errorMessage} (code: ${updateRes.status})`);
+    }
+
+    responseData = responseData || { success: true, message: "Mise à jour réussie (réponse vide)" };
+    if (updateSource === 'ticket-fallback') {
+      console.log("Mise à jour effectuée via PUT /tickets/{id} (fallback résolution)");
     }
 
     return {
