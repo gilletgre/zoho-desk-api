@@ -178,25 +178,34 @@ exports.handler = async (event) => {
     const ticketUpdateEndpoint = `${DESK_BASE}/tickets/${ticketId}`;
 
     async function sendResolutionUpdate(oauthToken, contextSuffix = '') {
-      // Essai prioritaire via l'endpoint dédié à la résolution
-      let res = await fetch(resolutionEndpoint, {
-        method: 'PUT',
-        headers: {
-          Authorization: `Zoho-oauthtoken ${oauthToken}`,
-          orgId: ZOHO_ORG_ID,
-          Accept: 'application/json',
-          'Content-Type': 'application/json'
+      // On tente plusieurs formes de payload pour s'adapter aux variations de l'API Desk
+      const attempts = [
+        {
+          source: 'resolution-endpoint',
+          url: resolutionEndpoint,
+          body: { content: newResolution },
+          fallbackStatuses: [400, 404, 405, 415]
         },
-        body: JSON.stringify({ content: newResolution })
-      });
+        {
+          source: 'ticket-fallback-object',
+          url: ticketUpdateEndpoint,
+          body: { resolution: { content: newResolution } },
+          fallbackStatuses: [400, 415]
+        },
+        {
+          source: 'ticket-fallback-string',
+          url: ticketUpdateEndpoint,
+          body: { resolution: newResolution },
+          fallbackStatuses: []
+        }
+      ];
 
-      let parsed = await parseZohoResponse(res, `mise à jour de la résolution${contextSuffix ? ` ${contextSuffix}` : ''}`);
-      let source = 'resolution-endpoint';
+      let lastRes = null;
+      let lastParsed = null;
+      let lastSource = null;
 
-      // Certains comptes n'autorisent pas /resolution ; fallback sur la mise à jour du ticket
-      if (!res.ok && [400, 404, 405, 415].includes(res.status)) {
-        console.warn(`/tickets/{id}/resolution indisponible (${res.status}), fallback sur PUT /tickets/{id}`);
-        res = await fetch(ticketUpdateEndpoint, {
+      for (const attempt of attempts) {
+        const res = await fetch(attempt.url, {
           method: 'PUT',
           headers: {
             Authorization: `Zoho-oauthtoken ${oauthToken}`,
@@ -204,13 +213,28 @@ exports.handler = async (event) => {
             Accept: 'application/json',
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ resolution: { content: newResolution } })
+          body: JSON.stringify(attempt.body)
         });
-        parsed = await parseZohoResponse(res, `mise à jour du ticket (fallback résolution${contextSuffix ? ` ${contextSuffix}` : ''})`);
-        source = 'ticket-fallback';
+
+        const parsed = await parseZohoResponse(res, `mise à jour de la résolution${contextSuffix ? ` ${contextSuffix}` : ''} (${attempt.source})`);
+
+        if (res.ok) {
+          return { res, parsed, source: attempt.source };
+        }
+
+        lastRes = res;
+        lastParsed = parsed;
+        lastSource = attempt.source;
+
+        const canTryNext = attempt.fallbackStatuses.includes(res.status);
+        if (!canTryNext) {
+          break;
+        }
+
+        console.warn(`${attempt.source} (${res.status}) ; tentative avec une autre forme de payload...`);
       }
 
-      return { res, parsed, source };
+      return { res: lastRes, parsed: lastParsed, source: lastSource };
     }
 
     let { res: updateRes, parsed: parsedUpdateData, source: updateSource } = await sendResolutionUpdate(token);
