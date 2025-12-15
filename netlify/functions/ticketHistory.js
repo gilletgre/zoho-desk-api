@@ -99,35 +99,66 @@ exports.handler = async (event) => {
       };
     }
 
-    const token = await getAccessToken();
+    const token = await getAccessToken(); // réutilisé dans la boucle
 
-    // Get ticket history (actions + sous-onglets)
-    // GET /api/v1/tickets/{ticket_Id}/History
-    const url = `${DESK_BASE}/tickets/${ticketId}/History?from=0&limit=50`;
+    // Zoho utilise from=1 (1-based). On pagine pour éviter de rater des éléments.
+    const limit = 50;
+    let from = 1;
+    const events = [];
+    let hasMore = true;
+    let safety = 15; // 15 pages * 50 = 750 événements max (empêche boucle infinie)
 
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Zoho-oauthtoken ${token}`,
-        orgId: ZOHO_ORG_ID
+    while (hasMore && safety > 0) {
+      const url = `${DESK_BASE}/tickets/${ticketId}/History?from=${from}&limit=${limit}`;
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Zoho-oauthtoken ${token}`,
+          orgId: ZOHO_ORG_ID
+        }
+      });
+
+      let data;
+      try {
+        data = await res.json();
+      } catch (parseErr) {
+        console.error("Parse error Zoho Desk (history):", parseErr);
+        return {
+          statusCode: 500,
+          body: JSON.stringify({ error: "Erreur parsing réponse Zoho", details: parseErr.message }),
+          headers: { "Access-Control-Allow-Origin": "*" }
+        };
       }
-    });
 
-    const data = await res.json();
-    if (!res.ok) {
-      console.error("Erreur Zoho Desk (history):", data);
-      return {
-        statusCode: 500,
-        body: JSON.stringify({ error: "Erreur Zoho Desk", details: data }),
-        headers: { "Access-Control-Allow-Origin": "*" }
-      };
+      if (!res.ok) {
+        console.error("Erreur Zoho Desk (history):", data);
+        return {
+          statusCode: res.status,
+          body: JSON.stringify({ error: "Erreur Zoho Desk", status: res.status, details: data }),
+          headers: { "Access-Control-Allow-Origin": "*" }
+        };
+      }
+
+      const batch = Array.isArray(data.data) ? data.data : data;
+      if (Array.isArray(batch)) {
+        events.push(...batch);
+      } else {
+        console.warn("Réponse historique inattendue (pas de tableau)", data);
+        break;
+      }
+
+      const ctx = data.page_context || data.pageContext || data.info || {};
+      const explicitHasMore =
+        ctx.has_more_page || ctx.has_more || ctx.has_more_records ||
+        (ctx.page && ctx.total_pages && ctx.page < ctx.total_pages);
+
+      hasMore = Boolean(explicitHasMore || batch.length === limit);
+      from += limit;
+      safety -= 1;
     }
-
-    // data.data contient normalement la liste des évènements
-    const history = Array.isArray(data.data) ? data.data : data;
 
     return {
       statusCode: 200,
-      body: JSON.stringify(history),
+      body: JSON.stringify(events),
       headers: { "Access-Control-Allow-Origin": "*" }
     };
   } catch (e) {
