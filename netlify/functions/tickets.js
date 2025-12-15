@@ -90,32 +90,54 @@ exports.handler = async (event) => {
   }
 
   try {
-    const token = await getAccessToken();
+    const token = await getAccessToken(); // découplé pour réutiliser dans la boucle
+    const limit = 50; // max autorisé par Zoho Desk
+    let from = 1; // Zoho Desk est 1-based pour "from"
+    const all = [];
+    let hasMore = true;
+    let safety = 15; // évite boucles infinies (15 * 50 = 750 tickets)
 
-    const url = `${DESK_BASE}/accounts/${ZOHO_ACCOUNT_ID}/tickets`;
+    while (hasMore && safety > 0) {
+      const url = `${DESK_BASE}/accounts/${ZOHO_ACCOUNT_ID}/tickets?from=${from}&limit=${limit}`;
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Zoho-oauthtoken ${token}`,
+          orgId: ZOHO_ORG_ID
+        }
+      });
 
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Zoho-oauthtoken ${token}`,
-        orgId: ZOHO_ORG_ID
+      const data = await res.json();
+      if (!res.ok) {
+        console.error("Erreur Zoho Desk (tickets):", data);
+        return {
+          statusCode: res.status,
+          body: JSON.stringify({ error: "Erreur Zoho Desk", status: res.status, details: data }),
+          headers: { "Access-Control-Allow-Origin": "*" }
+        };
       }
-    });
 
-    const data = await res.json();
-    if (!res.ok) {
-      console.error("Erreur Zoho Desk (tickets):", data);
-      return {
-        statusCode: 500,
-        body: JSON.stringify({ error: "Erreur Zoho Desk", details: data }),
-        headers: { "Access-Control-Allow-Origin": "*" }
-      };
+      const batch = Array.isArray(data.data) ? data.data : data;
+      if (Array.isArray(batch)) {
+        all.push(...batch);
+      } else {
+        console.warn("Réponse tickets inattendue (pas de tableau)", data);
+        break;
+      }
+
+      // Détecte la pagination. Zoho renvoie page_context/has_more_page ou info similaire.
+      const ctx = data.page_context || data.pageContext || data.info || {};
+      const explicitHasMore =
+        ctx.has_more_page || ctx.has_more || ctx.has_more_records ||
+        (ctx.page && ctx.total_pages && ctx.page < ctx.total_pages);
+
+      hasMore = Boolean(explicitHasMore || batch.length === limit);
+      from += limit;
+      safety -= 1;
     }
-
-    const tickets = Array.isArray(data.data) ? data.data : data;
 
     return {
       statusCode: 200,
-      body: JSON.stringify(tickets),
+      body: JSON.stringify(all),
       headers: { "Access-Control-Allow-Origin": "*" }
     };
   } catch (e) {
